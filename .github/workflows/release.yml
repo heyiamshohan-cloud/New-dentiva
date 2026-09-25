@@ -106,15 +106,10 @@ jobs:
         run: |
           $exe = Get-ChildItem -Path release -Filter '*portable*.exe' | Select-Object -First 1
           if (-not $exe) { throw 'portable exe not found in release/' }
-          Write-Host "Booting $($exe.Name)"
-          $env:ELECTRON_ENABLE_LOGGING = '1'
-          $p = Start-Process -FilePath $exe.FullName -PassThru `
-            -RedirectStandardError "$env:TEMP\dentiva-stderr.log"
+          Write-Host "Booting $($exe.Name) (PID watch, GUI-subsystem: no std-handle redirection possible)"
+          $p = Start-Process -FilePath $exe.FullName -PassThru
           Start-Sleep -Seconds 30
-          if ($p.HasExited) {
-            Get-Content "$env:TEMP\dentiva-stderr.log" -ErrorAction SilentlyContinue
-            throw "Dentiva Pro exited early (code $($p.ExitCode)) — first-run boot FAILED"
-          }
+          if ($p.HasExited) { throw "Dentiva Pro exited early (code $($p.ExitCode)) — first-run boot FAILED" }
           $roots = @($env:APPDATA, $exe.Directory.FullName)
           $dataDir = $roots | ForEach-Object { Join-Path $_ 'Dentiva Pro' } | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $dataDir) { Stop-Process -Id $p.Id -Force; throw 'userData directory was not created' }
