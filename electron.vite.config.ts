@@ -4,7 +4,11 @@ import { resolve } from 'path';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // Bundle all PURE-JS deps into out/main (*.js), keeping only the native
+    // better-sqlite3 external. electron-builder's dep collector repeatedly
+    // dropped transitive packages (e.g. archiver-utils) from the packaged
+    // app → first-boot crash "Cannot find module". Inlining removes the class.
+    plugins: [externalizeDepsPlugin({ exclude: ['archiver', 'extract-zip', 'zod'] })],
     build: {
       outDir: 'out/main',
       sourcemap: false,
