@@ -51,10 +51,12 @@ jobs:
       - name: Package NSIS installer + portable + ZIP (+ SHA256SUMS via postdist)
         shell: pwsh
         run: |
-          npx electron-builder --win --x64 --publish never *> release-builder.log
-          if ($LASTEXITCODE -ne 0) {
+          $out = npx electron-builder --win --x64 --publish never 2>&1 | Out-String -Width 400
+          $code = $LASTEXITCODE
+          $out | Out-File -FilePath release-builder.log -Encoding utf8
+          if ($code -ne 0) {
             Write-Host '--- electron-builder log tail ---'
-            Get-Content release-builder.log -Tail 120
+            ($out -split "`n" | Select-Object -Last 120) -join "`n"
             exit 1
           }
 
@@ -78,9 +80,12 @@ jobs:
           git fetch origin ci-logs
           if ($LASTEXITCODE -eq 0) { git checkout ci-logs } else { git checkout --orphan ci-logs }
           New-Item -ItemType Directory -Force 'logs' | Out-Null
-          Copy-Item release-builder.log "logs/builder-${{ github.run_id }}.log"
-          git add logs/
-          git commit -m "builder log — run ${{ github.run_id }}" 
+          if (-not (Test-Path 'release-builder.log')) { 'builder log was not captured' | Out-File -FilePath release-builder.log -Encoding utf8 }
+          Copy-Item release-builder.log "logs/builder-${{ github.run_id }}.log" -Force -Verbose
+          Get-ChildItem logs/ | Format-Table -AutoSize
+          git add -f "logs/builder-${{ github.run_id }}.log"
+          git status --short
+          git commit -m "builder log — run ${{ github.run_id }}"
           git push origin ci-logs
 
       - name: Verify SHA256SUMS.txt covers every artifact
