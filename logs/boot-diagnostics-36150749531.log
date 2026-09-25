@@ -1,0 +1,30 @@
+booting: D:\a\New-dentiva\New-dentiva\release\win-unpacked\Dentiva Pro.exe
+started pid=1084
+
+  Id MainWindowTitle MainModule
+  -- --------------- ----------
+8116 Error           System.Diagnostics.ProcessModule (Dentiva Pro.exe)
+
+screenshot captured
+--- packaged resources ---
+
+Name              Length
+----              ------
+app.asar.unpacked 
+app.asar          17949043
+elevate.exe       107520
+
+better_sqlite3.node unpacked: True
+after poll: HasExited=False ExitCode=n/a dataDir= cycles=18
+
+ NPM(K)    PM(M)      WS(M)     CPU(s)      Id  SI ProcessName
+ ------    -----      -----     ------      --  -- -----------
+     25    38.02      64.02       0.34    8116   2 Dentiva Pro
+
+Exception: D:\a\_temp\79c55428-4f79-49ba-8921-1d26c67a827f.ps1:56
+Line |
+  56 |  … t $alive) { throw 'userData directory not created within 90s (app is  …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | userData directory not created within 90s (app is alive but silent — see boot-electron.log)
+
+

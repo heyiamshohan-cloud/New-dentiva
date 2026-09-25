@@ -1,0 +1,35 @@
+  • electron-builder  version=25.1.8 os=10.0.26100
+  • loaded configuration  file=D:\a\New-dentiva\New-dentiva\electron-builder.yml
+  • skipped dependencies rebuild  reason=npmRebuild is set to false
+  • packaging       platform=win32 arch=x64 electron=34.5.8 appOutDir=release\win-unpacked
+  • downloading     url=https://github.com/electron/electron/releases/download/v34.5.8/electron-v34.5.8-win32-x64.zip size=116 MB parts=8
+  • downloaded      url=https://github.com/electron/electron/releases/download/v34.5.8/electron-v34.5.8-win32-x64.zip duration=571ms
+  • updating asar integrity executable resource  executablePath=release\win-unpacked\Dentiva Pro.exe
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z size=5.6 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z duration=426ms
+  • signing with signtool.exe  path=release\win-unpacked\Dentiva Pro.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • building        target=zip arch=x64 file=release\Dentiva Pro-1.0.0-win-x64.zip
+  • building        target=nsis file=release\Dentiva Pro-1.0.0-win-x64-setup.exe archs=x64 oneClick=false perMachine=false
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-3.0.4.1/nsis-3.0.4.1.7z size=1.3 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-3.0.4.1/nsis-3.0.4.1.7z duration=255ms
+  • signing with signtool.exe  path=release\win-unpacked\resources\elevate.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-resources-3.4.1/nsis-resources-3.4.1.7z size=731 kB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-resources-3.4.1/nsis-resources-3.4.1.7z duration=257ms
+  • signing with signtool.exe  path=release\__uninstaller-nsis-dentiva-pro.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • signing with signtool.exe  path=release\Dentiva Pro-1.0.0-win-x64-setup.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  • building block map  blockMapFile=release\Dentiva Pro-1.0.0-win-x64-setup.exe.blockmap
+  • building        target=portable file=release\Dentiva Pro-1.0.0-win-x64-portable.exe archs=x64
+  • signing with signtool.exe  path=release\Dentiva Pro-1.0.0-win-x64-portable.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+[postdist] artifacts:
+  Dentiva Pro-1.0.0-win-x64-portable.exe  83.5 MB  sha256:205f2a3cba0670ac…
+  Dentiva Pro-1.0.0-win-x64-setup.exe  83.7 MB  sha256:91b5369a2600759a…
+  Dentiva Pro-1.0.0-win-x64-setup.exe.blockmap  0.1 MB  sha256:58acd2d05aa2d8a6…
+  Dentiva Pro-1.0.0-win-x64.zip  114.4 MB  sha256:7ade7f96b35a2145…
+[postdist] wrote D:\a\New-dentiva\New-dentiva\release\SHA256SUMS.txt
+[postdist] wrote D:\a\New-dentiva\New-dentiva\release\release-manifest.json
+
