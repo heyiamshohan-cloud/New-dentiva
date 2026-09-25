@@ -18,9 +18,9 @@ describe('large dataset performance (10k patients)', () => {
 
   it('seeds 10k + related rows and stays responsive', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dentiva-perf-'));
-    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
     const ctx = new AppContext(dir);
     cleanups.push(() => { try { ctx.close(); } catch { /* already closed */ } });
+    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 }));
 
     const t0 = performance.now();
     // Bulk seed using direct prepared statements for speed of GENERATION only.

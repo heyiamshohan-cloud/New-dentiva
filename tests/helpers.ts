@@ -16,7 +16,7 @@ export function makeCtx(): { ctx: AppContext; dir: string; cleanup: () => void }
       } catch {
         // already closed
       }
-      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
     }
   };
 }

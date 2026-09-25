@@ -89,7 +89,7 @@ describe('backup & restore', () => {
       expect((e as AppError).code).toBe(ERR.INTEGRITY);
     }
     expect(ctx.services.patients.count()).toBe(before); // no partial corruption
-    fs.rmSync(tmp, { recursive: true, force: true });
+    fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
   });
 
   it('rejects archives without a manifest and non-Dentiva archives', async () => {

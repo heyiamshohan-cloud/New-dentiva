@@ -39,7 +39,7 @@ describe('schema & migrations', () => {
     const n = (h2.db.prepare('SELECT COUNT(*) c FROM users').get() as { c: number }).c;
     expect(n).toBe(1);
     h2.db.close();
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 });
   });
 
   it('enforces foreign keys', () => {

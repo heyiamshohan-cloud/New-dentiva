@@ -30,9 +30,9 @@ describe('race conditions & crash recovery', () => {
   it('rapid numbering from two open contexts never collides', () => {
     // Two AppContexts on the SAME data dir approximate two racing writers.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dentiva-race-'));
-    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
     const a = new AppContext(dir);
     cleanups.push(() => { try { a.close(); } catch { /* already closed */ } });
+    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 }));
     seedBasic(a);
     const b = new AppContext(dir);
     cleanups.push(() => { try { b.close(); } catch { /* already closed */ } });
@@ -73,8 +73,8 @@ describe('race conditions & crash recovery', () => {
 
   it('close during write, then restart: database stays valid and consistent', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dentiva-crash-'));
-    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
     const ctx = new AppContext(dir);
+    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 }));
     seedBasic(ctx);
     const patient = ctx.services.patients.search({ text: 'Rahim' }).rows[0];
     ctx.services.billing.createInvoice('t', { patientId: patient.id, items: [{ description: 'X', qty: 1, unitPrice: '100' }] });
@@ -89,8 +89,8 @@ describe('race conditions & crash recovery', () => {
 
   it('simulated mid-transaction kill leaves no partial payment', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dentiva-crash2-'));
-    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true }));
     const h = openDatabase(dir);
+    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 }));
     // Begin a transaction, write, then abandon by closing the handle hard.
     h.db.prepare('INSERT INTO patients (code, full_name, created_at, updated_at) VALUES (?,?,?,?)').run('PT-SIM-1', 'Sim', '2026', '2026');
     h.db.close();
