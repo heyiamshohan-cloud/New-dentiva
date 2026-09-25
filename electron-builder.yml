@@ -22,7 +22,9 @@ win:
     - target: zip
       arch: [x64]
   icon: build/icon.ico
-  artifactName: "${productName}-${version}-win-x64-${target}.${ext}"
+  # win-level name applies only to targets without their own section (i.e. zip).
+  # ${target} is NOT a valid macro here — nsis/portable use section-level names.
+  artifactName: "${productName}-${version}-win-x64.${ext}"
   verifyUpdateCodeSignature: false
 nsis:
   oneClick: false
