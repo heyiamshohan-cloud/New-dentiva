@@ -49,7 +49,22 @@ jobs:
         run: npm run rebuild:native
 
       - name: Package NSIS installer + portable + ZIP (+ SHA256SUMS via postdist)
-        run: npx electron-builder --win --x64 --publish never
+        shell: pwsh
+        run: |
+          npx electron-builder --win --x64 --publish never *> release-builder.log
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host '--- electron-builder log tail ---'
+            Get-Content release-builder.log -Tail 120
+            exit 1
+          }
+
+      - name: Upload builder log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: builder-log
+          path: release-builder.log
+          retention-days: 7
 
       - name: Verify SHA256SUMS.txt covers every artifact
         shell: pwsh
