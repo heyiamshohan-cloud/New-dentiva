@@ -68,27 +68,6 @@ jobs:
           path: release-builder.log
           retention-days: 7
 
-      # Debug aid: artifact/log download hosts may be unreachable from some
-      # networks, but github.com itself is not — commit failure diagnostics
-      # (builder log, boot diagnostics) where anyone with repo access can read.
-      - name: Publish failure diagnostics to the ci-logs branch
-        if: failure()
-        shell: pwsh
-        run: |
-          git config user.email actions@github.com
-          git config user.name 'github-actions'
-          git fetch origin ci-logs
-          if ($LASTEXITCODE -eq 0) { git checkout ci-logs } else { git checkout --orphan ci-logs }
-          New-Item -ItemType Directory -Force 'logs' | Out-Null
-          foreach ($f in @('release-builder.log', 'boot-diagnostics.log')) {
-            if (Test-Path $f) { Copy-Item $f "logs/$($f -replace '\.log$','')-${{ github.run_id }}.log" -Force }
-          }
-          Get-ChildItem logs/ | Format-Table -AutoSize
-          git add -f logs/
-          git status --short
-          git commit -m "failure diagnostics — run ${{ github.run_id }}"
-          git push origin ci-logs
-
       - name: Verify SHA256SUMS.txt covers every artifact
         shell: pwsh
         run: |
@@ -110,14 +89,17 @@ jobs:
             if (-not $exe) { throw 'portable exe not found in release/' }
             "booting: $($exe.FullName)" | Out-File boot-diagnostics.log
             Get-Process | Where-Object { $_.ProcessName -like '*entiva*' } | Format-Table | Out-File boot-diagnostics.log -Append
-            $p = Start-Process -FilePath $exe.FullName -PassThru
+            $p = Start-Process -FilePath $exe.FullName -ArgumentList '--disable-gpu' -PassThru
             "started pid=$($p.Id)" | Out-File boot-diagnostics.log -Append
             $alive = $false
             foreach ($i in 1..18) {
               Start-Sleep -Seconds 5
               if ($p.HasExited) { break }
               $roots = @($env:APPDATA, $env:LOCALAPPDATA, $exe.Directory.FullName)
-              $dataDir = $roots | ForEach-Object { Join-Path $_ 'Dentiva Pro' } | Where-Object { Test-Path $_ } | Select-Object -First 1
+              $dataDir = $roots | ForEach-Object {
+                $direct = Join-Path $_ 'Dentiva Pro'
+                if (Test-Path $direct) { $direct } else { Get-ChildItem $_ -Directory -Filter '*entiva*' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName -First 1 }
+              } | Select-Object -First 1
               if ($dataDir) { $alive = $true; break }
             }
             "after poll: HasExited=$($p.HasExited) ExitCode=$($p.HasExited ? $p.ExitCode : 'n/a') dataDir=$dataDir" | Out-File boot-diagnostics.log -Append
@@ -173,3 +155,40 @@ jobs:
             --title "Dentiva Pro ${{ github.ref_name }}" `
             --notes-file docs/RELEASE_NOTES.md `
             release/*
+
+      # Debug aid (MOVES with the job's end so if:failure() sees every step):
+      # artifact/log download hosts may be unreachable from some networks, but
+      # github.com itself is not — commit failure diagnostics (builder log,
+      # boot diagnostics) where anyone with repo access can read them.
+      - name: Publish failure diagnostics to the ci-logs branch
+        if: failure()
+        shell: pwsh
+        run: |
+          git config user.email actions@github.com
+          git config user.name 'github-actions'
+          git fetch origin ci-logs
+          if ($LASTEXITCODE -eq 0) { git checkout ci-logs } else { git checkout --orphan ci-logs }
+          New-Item -ItemType Directory -Force 'logs' | Out-Null
+          foreach ($f in @('release-builder.log', 'boot-diagnostics.log')) {
+            if (Test-Path $f) { Copy-Item $f "logs/$($f -replace '\.log$','')-${{ github.run_id }}.log" -Force }
+          }
+          Get-ChildItem logs/ | Format-Table -AutoSize
+          git add -f logs/
+          git status --short
+          git commit -m "failure diagnostics — run ${{ github.run_id }}"
+          git push origin ci-logs
+
+      - name: Record artifact manifest to the ci-logs branch (on success)
+        if: success()
+        shell: pwsh
+        run: |
+          git config user.email actions@github.com
+          git config user.name 'github-actions'
+          git fetch origin ci-logs
+          if ($LASTEXITCODE -eq 0) { git checkout ci-logs } else { git checkout --orphan ci-logs }
+          New-Item -ItemType Directory -Force 'manifests/${{ github.ref_name }}' | Out-Null
+          Copy-Item release/SHA256SUMS.txt "manifests/${{ github.ref_name }}/SHA256SUMS.txt" -Force
+          Copy-Item release/release-manifest.json "manifests/${{ github.ref_name }}/release-manifest.json" -Force
+          git add -f manifests/
+          git commit -m "artifact manifest ${{ github.ref_name }} — run ${{ github.run_id }}"
+          git push origin ci-logs
