@@ -1,0 +1,7 @@
+
+[dentiva:boot] module loaded electron=34.5.8 node=v20.19.1 pid=7628
+[dentiva:boot] single-instance lock: acquired
+[dentiva:boot] whenReady resolved
+[dentiva:boot] start v1.0.0 platform=win32 arch=x64 userData=C:\Users\runneradmin\AppData\Roaming\Dentiva Pro
+[dentiva:boot] context ready (database open, migrations applied)
+[dentiva:boot] window ready (renderer loaded)

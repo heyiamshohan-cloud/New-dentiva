@@ -1,0 +1,36 @@
+booting: D:\a\New-dentiva\New-dentiva\release\win-unpacked\Dentiva Pro.exe
+started pid=7892
+
+  Id MainWindowTitle MainModule
+  -- --------------- ----------
+3168                 System.Diagnostics.ProcessModule (Dentiva Pro.exe)
+5868                 System.Diagnostics.ProcessModule (Dentiva Pro.exe)
+7456                 System.Diagnostics.ProcessModule (Dentiva Pro.exe)
+7628 Dentiva Pro     System.Diagnostics.ProcessModule (Dentiva Pro.exe)
+
+screenshot captured
+--- packaged resources ---
+
+Name              Length
+----              ------
+app.asar.unpacked 
+app.asar          18349404
+elevate.exe       107520
+
+better_sqlite3.node unpacked: True
+after poll: HasExited=False ExitCode=n/a dataDir=C:\Users\runneradmin\AppData\Roaming\Dentiva Pro cycles=1
+--- in-app boot log ($TEMP\dentiva-boot.log) ---
+2026-09-25T15:13:38.888Z module loaded electron=34.5.8 node=v20.19.1 pid=7628
+2026-09-25T15:13:38.892Z single-instance lock: acquired
+2026-09-25T15:13:38.922Z whenReady resolved
+2026-09-25T15:13:38.923Z start v1.0.0 platform=win32 arch=x64 userData=C:\Users\runneradmin\AppData\Roaming\Dentiva Pro
+2026-09-25T15:13:38.958Z context ready (database open, migrations applied)
+2026-09-25T15:13:39.103Z window ready (renderer loaded)
+
+ NPM(K)    PM(M)      WS(M)     CPU(s)      Id  SI ProcessName
+ ------    -----      -----     ------      --  -- -----------
+     17    12.87      47.07       0.05    3168   2 Dentiva Pro
+     22    15.18      59.96       0.09    5868   2 Dentiva Pro
+     26    26.11      79.70       0.16    7456   2 Dentiva Pro
+     39    78.18     102.78       0.47    7628   2 Dentiva Pro
+
