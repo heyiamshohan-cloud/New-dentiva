@@ -112,6 +112,25 @@ jobs:
                 if ((Get-Content "$env:TEMP\dentiva-boot.log" -Raw) -match 'context ready') { $alive = $true; break }
               }
             }
+            # Decisive forensics for silent boots: window titles of every Dentiva
+            # process (a modal startup dialog shows up here) and a screenshot.
+            Get-Process | Where-Object { $_.ProcessName -like '*entiva*' } |
+              Select-Object Id, MainWindowTitle, MainModule | Format-Table | Out-File boot-diagnostics.log -Append
+            try {
+              Add-Type -AssemblyName System.Drawing, System.Windows.Forms
+              $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+              $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+              $g = [System.Drawing.Graphics]::FromImage($bmp)
+              $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
+              $bmp.Save("$PWD\boot-screen.png")
+              'screenshot captured' | Out-File boot-diagnostics.log -Append
+            } catch { "screenshot unavailable: $($_.Exception.Message)" | Out-File boot-diagnostics.log -Append }
+            '--- packaged resources ---' | Out-File boot-diagnostics.log -Append
+            if (Test-Path 'release\win-unpacked\resources') {
+              Get-ChildItem 'release\win-unpacked\resources' | Select-Object Name, Length | Format-Table | Out-File boot-diagnostics.log -Append
+              $node = 'release\win-unpacked\resources\app.asar.unpacked\node_modules\better-sqlite3\build\Release\better_sqlite3.node'
+              "better_sqlite3.node unpacked: $(Test-Path $node)" | Out-File boot-diagnostics.log -Append
+            }
             "after poll: HasExited=$($p.HasExited) ExitCode=$($p.HasExited ? $p.ExitCode : 'n/a') dataDir=$dataDir cycles=$i" | Out-File boot-diagnostics.log -Append
             if (Test-Path "$env:TEMP\dentiva-boot.log") {
               '--- in-app boot log ($TEMP\dentiva-boot.log) ---' | Out-File boot-diagnostics.log -Append
@@ -188,7 +207,7 @@ jobs:
           git fetch origin ci-logs
           if ($LASTEXITCODE -eq 0) { git checkout ci-logs } else { git checkout --orphan ci-logs }
           New-Item -ItemType Directory -Force 'logs' | Out-Null
-          foreach ($f in @('release-builder.log', 'boot-diagnostics.log', 'boot-electron.log')) {
+          foreach ($f in @('release-builder.log', 'boot-diagnostics.log', 'boot-electron.log', 'boot-screen.png')) {
             if (Test-Path $f) { Copy-Item $f "logs/$($f -replace '\.log$','')-${{ github.run_id }}.log" -Force }
           }
           Get-ChildItem logs/ | Format-Table -AutoSize
