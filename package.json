@@ -22,7 +22,8 @@
     "pack:dir": "npm run build && electron-builder --dir",
     "pack:win": "npm run build && electron-builder --win --x64",
     "pack:win:portable": "npm run build && electron-builder --win --x64 portable zip",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "icon": "node scripts/build-icon.mjs"
   },
   "dependencies": {
     "archiver": "^7.0.1",
@@ -31,6 +32,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/archiver": "^6.0.3",
     "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.5",
@@ -41,6 +43,7 @@
     "electron": "^34.0.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
+    "png-to-ico": "^3.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.1",
