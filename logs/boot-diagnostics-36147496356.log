@@ -1,0 +1,33 @@
+booting: D:\a\New-dentiva\New-dentiva\release\Dentiva Pro-1.0.0-win-x64-portable.exe
+started pid=5456
+after poll: HasExited=False ExitCode=n/a dataDir=
+
+ NPM(K)    PM(M)      WS(M)     CPU(s)      Id  SI ProcessName
+ ------    -----      -----     ------      --  -- -----------
+     25    40.01      66.13       0.36    9196   2 Dentiva Pro
+     19     4.71      19.00       7.61    5456   2 Dentiva Pro-1.0.0-win-x64-portable
+
+Exception: D:\a\_temp\7b73df5a-7f82-44ce-96d0-c01e5dff17d0.ps1:23
+Line |
+  23 |  … t $alive) { throw "userData directory not created within 90s (checked …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | userData directory not created within 90s (checked APPDATA/LOCALAPPDATA/exe-dir)
+
+
+Name
+----
+Adobe
+Microsoft
+Mozilla
+NuGet
+.IdentityService
+AzureFunctionsTools
+D3DSCache
+electron
+electron-builder
+Google
+Microsoft
+Mozilla
+Packages
+Temp
+
