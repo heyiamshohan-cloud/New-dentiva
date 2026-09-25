@@ -1,0 +1,232 @@
+name: Release
+
+# Two ways to run:
+#   1. Push a version tag:  git tag -a v1.0.0 -m "Dentiva Pro 1.0.0" && git push origin v1.0.0
+#      → builds artifacts, verifies them, publishes a GitHub Release.
+#   2. Actions → Release → Run workflow (manual)
+#      → identical build + verification, artifacts uploaded as a GitHub Actions
+#        artifact only — NOTHING is published. Use this as the rehearsal.
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # No signing certificates are configured yet — do not hunt for them.
+  CSC_IDENTITY_AUTO_DISCOVERY: false
+
+jobs:
+  windows-release:
+    name: Windows x64 artifacts
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Quality gates (must all pass before packaging)
+        run: |
+          npm run typecheck
+          npm test
+          npm run smoke
+          npm run audit:static
+          npm run perf
+          npm run scale -- 100000 3
+
+      - name: Production bundle
+        run: npm run build
+
+      - name: Rebuild better-sqlite3 for the Electron ABI
+        run: npm run rebuild:native
+
+      - name: Package NSIS installer + portable + ZIP (+ SHA256SUMS via postdist)
+        shell: pwsh
+        run: |
+          $out = npx electron-builder --win --x64 --publish never 2>&1 | Out-String -Width 400
+          $code = $LASTEXITCODE
+          $out | Out-File -FilePath release-builder.log -Encoding utf8
+          if ($code -ne 0) {
+            Write-Host '--- electron-builder log tail ---'
+            ($out -split "`n" | Select-Object -Last 120) -join "`n"
+            exit 1
+          }
+
+      - name: Upload builder log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: builder-log
+          path: release-builder.log
+          retention-days: 7
+
+      - name: Verify SHA256SUMS.txt covers every artifact
+        shell: pwsh
+        run: |
+          Push-Location release
+          $sums = Get-Content SHA256SUMS.txt
+          foreach ($line in $sums) {
+            $hash, $name = $line -split '\s+', 2
+            $actual = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
+            if ($actual -ne $hash) { throw "checksum mismatch: $name" }
+            Write-Host "OK $name"
+          }
+          Pop-Location
+
+      - name: Clean-boot verification (portable exe, first run on this machine)
+        shell: pwsh
+        run: |
+          try {
+            # Boot the win-unpacked exe THROUGH a thin cmd wrapper: PowerShell
+            # refuses std-handle redirection for GUI-subsystem apps, but cmd
+            # CreateProcess redirection works — giving us Electron's own log.
+            $exe = Get-ChildItem -Path 'release\win-unpacked' -Filter '*.exe' | Select-Object -First 1
+            if (-not $exe) { $exe = Get-ChildItem -Path release -Filter '*portable*.exe' | Select-Object -First 1 }
+            if (-not $exe) { throw 'no bootable exe found in release/' }
+            $log = "$PWD\boot-electron.log"
+            "booting: $($exe.FullName)" | Out-File boot-diagnostics.log
+            $cmd = '"' + $exe.FullName + '" --enable-logging --disable-gpu 1>"' + $log + '" 2>&1'
+            Set-Content boot-run.cmd $cmd -Encoding ascii
+            $p = Start-Process "$PWD\boot-run.cmd" -PassThru
+            "started pid=$($p.Id)" | Out-File boot-diagnostics.log -Append
+            $alive = $false; $dataDir = $null
+            foreach ($i in 1..18) {
+              Start-Sleep -Seconds 5
+              if ($p.HasExited) { break }
+              $roots = @($env:APPDATA, $env:LOCALAPPDATA, $exe.Directory.FullName)
+              foreach ($r in $roots) {
+                $direct = Join-Path $r 'Dentiva Pro'
+                if (Test-Path $direct) { $dataDir = $direct; break }
+                $wild = Get-ChildItem $r -Directory -Filter '*entiva*' -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($wild) { $dataDir = $wild.FullName; break }
+              }
+              if ($dataDir -and (Test-Path "$env:TEMP\dentiva-boot.log")) {
+                if ((Get-Content "$env:TEMP\dentiva-boot.log" -Raw) -match 'context ready') { $alive = $true; break }
+              }
+            }
+            # Decisive forensics for silent boots: window titles of every Dentiva
+            # process (a modal startup dialog shows up here) and a screenshot.
+            Get-Process | Where-Object { $_.ProcessName -like '*entiva*' } |
+              Select-Object Id, MainWindowTitle, MainModule | Format-Table | Out-File boot-diagnostics.log -Append
+            try {
+              Add-Type -AssemblyName System.Drawing, System.Windows.Forms
+              $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+              $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+              $g = [System.Drawing.Graphics]::FromImage($bmp)
+              $g.CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
+              $bmp.Save("$PWD\boot-screen.png")
+              'screenshot captured' | Out-File boot-diagnostics.log -Append
+            } catch { "screenshot unavailable: $($_.Exception.Message)" | Out-File boot-diagnostics.log -Append }
+            '--- packaged resources ---' | Out-File boot-diagnostics.log -Append
+            if (Test-Path 'release\win-unpacked\resources') {
+              Get-ChildItem 'release\win-unpacked\resources' | Select-Object Name, Length | Format-Table | Out-File boot-diagnostics.log -Append
+              $node = 'release\win-unpacked\resources\app.asar.unpacked\node_modules\better-sqlite3\build\Release\better_sqlite3.node'
+              "better_sqlite3.node unpacked: $(Test-Path $node)" | Out-File boot-diagnostics.log -Append
+            }
+            "after poll: HasExited=$($p.HasExited) ExitCode=$($p.HasExited ? $p.ExitCode : 'n/a') dataDir=$dataDir cycles=$i" | Out-File boot-diagnostics.log -Append
+            if (Test-Path "$env:TEMP\dentiva-boot.log") {
+              '--- in-app boot log ($TEMP\dentiva-boot.log) ---' | Out-File boot-diagnostics.log -Append
+              Get-Content "$env:TEMP\dentiva-boot.log" | Out-File boot-diagnostics.log -Append
+            }
+            Get-Process | Where-Object { $_.ProcessName -like '*entiva*' } | Format-Table | Out-File boot-diagnostics.log -Append
+            if ($p.HasExited) { throw "Dentiva Pro exited early (code $($p.ExitCode)) — first-run boot FAILED" }
+            if (-not $alive) { throw 'userData directory not created within 90s (app is alive but silent — see boot-electron.log)' }
+            Write-Host "OK: alive, data at $dataDir"
+            Get-ChildItem $dataDir -Recurse -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table
+            Get-Process | Where-Object { $_.ProcessName -like '*entiva*' } | Stop-Process -Force -ErrorAction SilentlyContinue
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          } catch {
+            $_ | Out-File boot-diagnostics.log -Append
+            if (Test-Path "$PWD\boot-electron.log") {
+              Write-Host '--- electron boot log tail ---'
+              Get-Content "$PWD\boot-electron.log" -Tail 80
+              Get-Content "$PWD\boot-electron.log" -Tail 80 | Out-File boot-diagnostics.log -Append
+            }
+            throw
+          }
+
+      - name: NSIS silent install + uninstall verification
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem -Path release -Filter '*setup.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'setup.exe not found in release/' }
+          Write-Host "Installing $($setup.Name) silently"
+          $i = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($i.ExitCode -ne 0) { throw "installer exit code $($i.ExitCode)" }
+          $installRoot = Join-Path $env:LOCALAPPDATA 'Programs\Dentiva Pro'
+          $appExe = Join-Path $installRoot 'Dentiva Pro.exe'
+          if (-not (Test-Path $appExe)) { throw "app executable missing after install: $appExe" }
+          Write-Host "OK: installed to $installRoot"
+          $unins = Get-ChildItem $installRoot -Filter '*ninstall*.exe' | Select-Object -First 1
+          if (-not $unins) { throw 'uninstaller not found' }
+          Write-Host "Uninstalling silently via $($unins.Name)"
+          $u = Start-Process -FilePath $unins.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "uninstaller exit code $($u.ExitCode)" }
+          Start-Sleep -Seconds 10
+          if (Test-Path $appExe) { throw 'app executable still present after uninstall' }
+          Write-Host 'OK: silent install/uninstall round-trip verified'
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dentiva-pro-windows-${{ github.ref_name }}-${{ github.run_attempt }}
+          path: release/*
+          retention-days: 30
+
+      # Only a final tag (v1.0.0, no prerelease suffix) publishes. Pre-release
+      # tags (v1.0.0-rc1 …) and manual runs rehearse everything above.
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && startsWith(github.ref_name, 'v') && !contains(github.ref_name, '-')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          gh release create ${{ github.ref_name }} --verify-tag `
+            --title "Dentiva Pro ${{ github.ref_name }}" `
+            --notes-file docs/RELEASE_NOTES.md `
+            release/*
+
+      # Debug aid (MOVES with the job's end so if:failure() sees every step):
+      # artifact/log download hosts may be unreachable from some networks, but
+      # github.com itself is not — commit failure diagnostics (builder log,
+      # boot diagnostics) where anyone with repo access can read them.
+      - name: Publish failure diagnostics to the ci-logs branch
+        if: failure()
+        shell: pwsh
+        run: |
+          git config user.email actions@github.com
+          git config user.name 'github-actions'
+          git fetch origin ci-logs
+          if ($LASTEXITCODE -eq 0) { git checkout ci-logs } else { git checkout --orphan ci-logs }
+          New-Item -ItemType Directory -Force 'logs' | Out-Null
+          foreach ($f in @('release-builder.log', 'boot-diagnostics.log', 'boot-electron.log', 'boot-screen.png')) {
+            if (Test-Path $f) { Copy-Item $f "logs/$($f -replace '\.log$','')-${{ github.run_id }}.log" -Force }
+          }
+          Get-ChildItem logs/ | Format-Table -AutoSize
+          git add -f logs/
+          git status --short
+          git commit -m "failure diagnostics — run ${{ github.run_id }}"
+          git push origin ci-logs
+
+      - name: Record artifact manifest to the ci-logs branch (on success)
+        if: success()
+        shell: pwsh
+        run: |
+          git config user.email actions@github.com
+          git config user.name 'github-actions'
+          git fetch origin ci-logs
+          if ($LASTEXITCODE -eq 0) { git checkout ci-logs } else { git checkout --orphan ci-logs }
+          New-Item -ItemType Directory -Force 'manifests/${{ github.ref_name }}' | Out-Null
+          Copy-Item release/SHA256SUMS.txt "manifests/${{ github.ref_name }}/SHA256SUMS.txt" -Force
+          Copy-Item release/release-manifest.json "manifests/${{ github.ref_name }}/release-manifest.json" -Force
+          git add -f manifests/
+          git commit -m "artifact manifest ${{ github.ref_name }} — run ${{ github.run_id }}"
+          git push origin ci-logs

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gates:
+    name: Quality gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check (strict, zero errors required)
+        run: npm run typecheck
+
+      - name: Unit & integration tests
+        run: npm test
+
+      - name: Clinic-day end-to-end smoke
+        run: npm run smoke
+
+      - name: Static security audit
+        run: npm run audit:static
+
+      - name: Hot-path perf budgets
+        run: npm run perf
+
+      - name: Scale test (10k patients)
+        run: npm run scale -- 10000 3
+
+      - name: Production bundle builds
+        run: npm run build
