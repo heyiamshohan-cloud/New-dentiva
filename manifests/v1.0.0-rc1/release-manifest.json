@@ -1,0 +1,28 @@
+{
+  "product": "Dentiva Pro",
+  "version": "1.0.0",
+  "platform": "win32",
+  "generatedAt": "2026-09-25T15:05:58.355Z",
+  "artifacts": [
+    {
+      "file": "Dentiva Pro-1.0.0-win-x64-portable.exe",
+      "bytes": 87658321,
+      "sha256": "10b70f0557ac18f46d03c7114d0c482e5e6e918f46088c4badf1364fa481677b"
+    },
+    {
+      "file": "Dentiva Pro-1.0.0-win-x64-setup.exe",
+      "bytes": 87885975,
+      "sha256": "ff7dcc42b25744ff469b98eb0e48c60da76aba1404f551e1ba6f7161a977048b"
+    },
+    {
+      "file": "Dentiva Pro-1.0.0-win-x64-setup.exe.blockmap",
+      "bytes": 93509,
+      "sha256": "cf7f06f99233af17074119139764e1f60997da0ada241b1e52554a56e0abadcd"
+    },
+    {
+      "file": "Dentiva Pro-1.0.0-win-x64.zip",
+      "bytes": 120042333,
+      "sha256": "f812933a48f39834f5a02b5307a359fcba27c59b7b0c182c4d379b2ae3494443"
+    }
+  ]
+}
