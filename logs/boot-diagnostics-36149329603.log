@@ -1,0 +1,15 @@
+booting: D:\a\New-dentiva\New-dentiva\release\win-unpacked\Dentiva Pro.exe
+started pid=7472
+after poll: HasExited=False ExitCode=n/a dataDir= cycles=18
+
+ NPM(K)    PM(M)      WS(M)     CPU(s)      Id  SI ProcessName
+ ------    -----      -----     ------      --  -- -----------
+     25    40.24      66.22       0.38    2708   2 Dentiva Pro
+
+Exception: D:\a\_temp\60ae501a-2a5a-45c5-b0a7-c55262986ba5.ps1:37
+Line |
+  37 |  … t $alive) { throw 'userData directory not created within 90s (app is  …
+     |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     | userData directory not created within 90s (app is alive but silent — see boot-electron.log)
+
+
