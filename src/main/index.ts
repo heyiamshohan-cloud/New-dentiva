@@ -25,8 +25,10 @@ function bootLog(msg: string): void {
   }
   console.log(`[dentiva:boot] ${msg}`);
 }
+bootLog(`module loaded electron=${process.versions.electron ?? 'unknown'} node=${process.version} pid=${process.pid}`);
 
 const gotLock = app.requestSingleInstanceLock();
+bootLog(`single-instance lock: ${gotLock ? 'acquired' : 'DENIED (second instance)'}`);
 if (!gotLock) {
   app.quit();
 } else {
@@ -39,6 +41,7 @@ if (!gotLock) {
 
   void app.whenReady().then(async () => {
   try {
+    bootLog('whenReady resolved');
     const dataDir = path.join(app.getPath('userData'));
     bootLog(`start v${app.getVersion()} platform=${process.platform} arch=${process.arch} userData=${dataDir}`);
     ctx = new AppContext(dataDir, app.getVersion());
