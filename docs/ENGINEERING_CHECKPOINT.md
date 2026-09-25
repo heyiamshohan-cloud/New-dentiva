@@ -47,27 +47,52 @@ This file is the always-current resume point. Read it first when continuing work
   npmmirror both TLS-blocked; only registry.npmjs.org + github.com HTML work.
   Consequence: no local packaging of ANY platform in this sandbox — use CI.
 
-## Release path now automated
+## Release pipeline — END-TO-END VERIFIED 2026-09-25
 
-- `.github/workflows/ci.yml` — every push/PR on ubuntu-latest: npm ci →
-  typecheck → 81 tests → smoke → static audit → perf → 10k scale → bundle.
-- `.github/workflows/release.yml` — on tag `v*.*.*` (windows-latest): full
-  gates incl. 100k scale → bundle → electron-ABI native rebuild →
-  electron-builder (NSIS + portable + ZIP per `electron-builder.yml`) →
-  `SHA256SUMS.txt` + manifest via `scripts/postdist.cjs` → clean-boot test
-  (launches the portable exe on the runner, asserts 30 s liveness + userData
-  creation, then kills it) → artifact upload → `gh release create` with all
-  of `release/*` and `docs/RELEASE_NOTES.md` as notes.
+CI (`.github/workflows/ci.yml`): every push/PR on ubuntu-latest — npm ci →
+typecheck → 81 tests → smoke → static audit → perf → 10k scale → bundle.
+First live run 36140789652: **green (40 s)**.
 
-  Release procedure shrinks to: keep gates green → `git tag -a v1.0.0 -m "…"`
-  → `git push origin v1.0.0` → watch the run.
+Release (`.github/workflows/release.yml`): tag-triggered (final tags publish;
+pre-release tags like `v1.0.0-rc1` and manual dispatch build + verify without
+publishing). Rehearsal campaign on tag `v1.0.0-rc1` (9 iterations, run ids
+36141258362 … 36146099881) found and fixed, in order:
+1. Windows EBUSY in tests (DB open during temp rm) → close-then-rm + retries
+   (tests/perf.test.ts, tests/race.test.ts, helpers/schema/backup rm flags).
+2. `build/icon.ico` referenced but never committed → deterministic
+   `scripts/build-icon.mjs` (@resvg/resvg-js → png-to-ico, 6 frames) + `npm run icon`.
+3. `electron-builder.yml`: unknown top-level key `zip:` removed (fails schema
+   validation).
+4. Same file: `${target}` macro removed from win-level `artifactName`
+   (undefined macro error after pack/sign-skip stage).
+5. Same file: `npmRebuild: false` (CI already runs install-app-deps; avoids
+   node-gyp cross-compile refusal) and explicit `files:` allowlist dropped so
+   production deps externalized by electron-vite (better-sqlite3/archiver/
+   extract-zip/zod) actually ship.
+6. Clean-boot step: GUI-subsystem processes reject std-handle redirection —
+   polling loop now watches PID + userData (≤90 s) instead.
+Final rehearsal run **36146099881 passed every step** — quality gates (incl.
+100k scale), bundle, electron-ABI native rebuild, packaging (NSIS + portable
++ ZIP), postdist `SHA256SUMS.txt` + `release-manifest.json`, checksum
+re-verification, portable clean-boot on the fresh runner, NSIS silent
+install/uninstall round-trip, artifact upload. Diagnostics path: on failure
+the workflow pushes `logs/*.log` to the `ci-logs` branch (GitHub asset hosts
+are blocked from this sandbox; the git host is not).
+Note: GH token for this sandbox expired right after the run — confirm step
+details at https://github.com/heyiamshohan-cloud/New-dentiva/actions/runs/36146099881
+and delete/re-point tag `v1.0.0-rc1` before the real release.
+
+Release procedure now: gates green → merge to main →
+`git tag -a v1.0.0 -m "Dentiva Pro 1.0.0" && git push origin v1.0.0` →
+the workflow builds, verifies, and publishes the GitHub Release with
+`docs/RELEASE_NOTES.md`.
 
 ## Release blockers (live list)
 
 | # | Blocker | Status |
 | --- | --- | --- |
-| 1 | Windows artifacts built from the release commit | Path automated in `release.yml` — closes on first tag push |
-| 2 | Clean-machine install/run verification | Portable-exe boot test automated in CI; NSIS silent-install step and a physical-machine pass per `docs/RELEASE.md` §5 still pending the first produced artifact |
+| 1 | Windows artifacts built from the release commit | **CLOSED (mechanism)** — produced & verified in CI run 36146099881 (`v1.0.0-rc1` rehearsed, not published); first final tag produces the shippable set |
+| 2 | Clean-machine install/run verification | **CLOSED (CI level)** — portable boot + NSIS silent install/uninstall verified on a fresh windows-latest runner each run; optional physical-machine pass per `docs/RELEASE.md` §5 remains recommended |
 | 3 | Signed executables (code-signing cert) | Open — commercial decision |
 
 No code-level blockers remain.

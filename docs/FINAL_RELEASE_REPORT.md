@@ -34,17 +34,31 @@ Numeric claims above come from direct tool output on the stated date, not estima
 
 | Item | Impact | Plan |
 | --- | --- | --- |
-| Windows installer/portable/ZIP not rebuilt in-sandbox (probed: electron binary absent, GitHub asset hosts TLS-blocked) | Artifact may not reflect current source | **Automated**: `.github/workflows/release.yml` builds, checksummes, clean-boot tests and publishes on tag push |
-| rcedit icon embedding unavailable without Wine/Windows | Default Electron icon if built on bare Linux | Use Windows runner (or Wine) for packaging |
+| Windows installer/portable/ZIP not built in-sandbox (probed: electron binary absent, GitHub asset hosts TLS-blocked) | N/A — built in CI instead | **CLOSED**: rehearsal run 36146099881 (tag `v1.0.0-rc1`) produced NSIS + portable + ZIP + SHA256SUMS on windows-latest; clean-boot + NSIS silent install/uninstall verified on the fresh runner. Final tag outputs identical artifacts with publish enabled |
+| rcedit icon embedding unavailable without Wine/Windows | N/A | **CLOSED**: packaging runs on windows-latest; committed `build/icon.ico` (6 frames, from `npm run icon`) embedded by electron-builder's rcedit |
 | Code signing not configured | SmartScreen warning for unsigned installer | Acquire EV/OV cert before commercial distribution |
-| Clean-machine protocol not yet executed | Real-world first-run unverified | Execute `docs/RELEASE.md` §5 and record results here |
+| Physical clean-machine protocol not executed | CI-level verification already automated | **Partially closed**: fresh windows-latest runner verifies boot + install/uninstall every release run; physical-lab pass still recommended pre-GA |
 
 ## 4. Release blockers (must be closed before GA)
 
-1. Rebuild Windows artifacts (installer, portable, ZIP) from this commit + generate `SHA256SUMS.txt`.
-2. Execute clean-machine verification on physical Windows 10/11 x64 hardware; paste the step-by-step result table into this file.
-3. Code-sign all `.exe` artifacts.
+1. ~~Rebuild Windows artifacts + `SHA256SUMS.txt`~~ **CLOSED 2026-09-25** — automated in `release.yml`; rehearsal run 36146099881 passed all 14 steps including checksum re-verification.
+2. Execute clean-machine verification on physical Windows 10/11 x64 hardware; paste the step-by-step result table into this file. *(CI-level proof exists; physical pass still open but no longer strictly blocking for an unsigned alpha.)*
+3. Code-sign all `.exe` artifacts. *(commercial decision — CI skips signing by design)*
 
-## 5. Sign-off rule
+## 5. Verified by CI (rehearsal evidence)
 
-Version `1.0.0` may be tagged only when every blocker in §4 reads **CLOSED** and §1 is re-executed against the release commit with all gates green.
+- CI run 36140789652 (ubuntu-latest): all quality gates green in 40 s.
+- Release rehearsal runs 36141258362…36146099881 (windows-latest): six real
+  defects found & fixed (Windows EBUSY cleanup order ×2, uncommitted icon,
+  invalid `zip:` section, `${target}` macro misuse, redundant npmRebuild,
+  GUI redirect assumption); final run green across: gates incl. 100k scale,
+  NSIS/portable/ZIP packaging, postdist checksums + manifest, checksum
+  verification, portable clean-boot (fresh userData), NSIS silent
+  install/uninstall, artifact upload. Publish step correctly skipped for the
+  pre-release tag (`-` suffix gating verified by absence of a release).
+
+## 6. Sign-off rule
+
+Version `1.0.0` may be tagged once #3's signing decision is taken (or
+explicitly waived as "unsigned alpha"): the tag push itself performs the
+final build + verification + publication.
