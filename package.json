@@ -1,0 +1,55 @@
+{
+  "name": "dentiva-pro",
+  "productName": "Dentiva Pro",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Premium offline-first dental clinic & practice management for Windows x64.",
+  "author": "Dentiva",
+  "license": "UNLICENSED",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "perf": "tsx scripts/perf.ts",
+    "scale": "tsx scripts/scale-test.ts",
+    "audit:static": "tsx scripts/static-audit.ts",
+    "rebuild:native": "electron-builder install-app-deps",
+    "pack:dir": "npm run build && electron-builder --dir",
+    "pack:win": "npm run build && electron-builder --win --x64",
+    "pack:win:portable": "npm run build && electron-builder --win --x64 portable zip",
+    "smoke": "tsx scripts/smoke.ts"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "better-sqlite3": "^12.4.1",
+    "extract-zip": "^2.0.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.5",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^2.1.8",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,46 @@
+# Dentiva Pro — Windows x64 packaging matrix.
+# Artifacts per release: NSIS installer (per-machine, one-click), portable exe,
+# plain ZIP, plus blockmap files. The `postdist` script then writes
+# SHA256SUMS.txt covering every artifact.
+appId: com.dentiva.pro
+productName: Dentiva Pro
+copyright: Copyright © 2026 Dentiva
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+asarUnpack:
+  - node_modules/better-sqlite3/**
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+    - target: zip
+      arch: [x64]
+  icon: build/icon.ico
+  artifactName: "${productName}-${version}-win-x64-${target}.${ext}"
+  verifyUpdateCodeSignature: false
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Dentiva Pro
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  artifactName: "${productName}-${version}-win-x64-setup.${ext}"
+portable:
+  artifactName: "${productName}-${version}-win-x64-portable.${ext}"
+zip:
+  artifactName: "${productName}-${version}-win-x64.zip"
+electronDownload:
+  cache: node_modules/.cache/electron
+npmRebuild: true
+publish: null
+afterAllArtifactBuild: scripts/postdist.cjs
