@@ -45,17 +45,56 @@ Numeric claims above come from direct tool output on the stated date, not estima
 2. Execute clean-machine verification on physical Windows 10/11 x64 hardware; paste the step-by-step result table into this file. *(CI-level proof exists; physical pass still open but no longer strictly blocking for an unsigned alpha.)*
 3. Code-sign all `.exe` artifacts. *(commercial decision — CI skips signing by design)*
 
-## 5. Verified by CI (rehearsal evidence)
+## 5. Verified by CI (rehearsal evidence — corrected record)
 
-- CI run 36140789652 (ubuntu-latest): all quality gates green in 40 s.
-- Release rehearsal runs 36141258362…36146099881 (windows-latest): six real
-  defects found & fixed (Windows EBUSY cleanup order ×2, uncommitted icon,
-  invalid `zip:` section, `${target}` macro misuse, redundant npmRebuild,
-  GUI redirect assumption); final run green across: gates incl. 100k scale,
-  NSIS/portable/ZIP packaging, postdist checksums + manifest, checksum
-  verification, portable clean-boot (fresh userData), NSIS silent
-  install/uninstall, artifact upload. Publish step correctly skipped for the
-  pre-release tag (`-` suffix gating verified by absence of a release).
+- CI run 36140789652 (ubuntu-latest): all quality gates green in ~40 s.
+- Rehearsal campaign on tag `v1.0.0-rc1`, windows-latest (12 runs):
+  - 36141258362 / 36141729198 — Windows EBUSY: temp rm while SQLite open →
+    close-then-rm cleanup order + retry flags in perf/race/schema/backup tests.
+  - 36142132008 / 36142837374 — electron-builder config schema rejection
+    (unknown top-level `zip:` key) — removed.
+  - 36143549595 — `${target}` macro in win-level artifactName (undefined
+    there) — replaced with static macro set.
+  - 36144270398 / 36144710757 — npmRebuild dedupe (`npmRebuild: false`; CI
+    runs install-app-deps explicitly).
+  - 36145514824 / 36146099881 / 36147496356 — clean-boot step design flaws:
+    GUI-subsystem exes reject PS std-handle redirection; diagnostics step
+    placed too early to see later failures — moved to job end; polling loop
+    added. (An earlier session note claiming these runs were green was WRONG
+    — `gh run watch` exit signal was corrupted by a token expiry; the API
+    record stands: they failed at clean-boot.)
+  - 36148459026…36150106281 — added in-app boot trace
+    ($TMP\dentiva-boot.log) + window-title forensics; revealed a modal
+    Electron "Error" dialog instead of a healthy boot.
+  - 36150749531 — screenshot evidence: **"A JavaScript error occurred in
+    the main process — Cannot find module 'archiver-utils'"** — the
+    packaged app was missing a transitive dep (electron-builder collector).
+    Fixed by inlining pure-JS deps (archiver/extract-zip/zod) into the main
+    bundle via externalizeDepsPlugin exclude; only native better-sqlite3
+    remains external (asarUnpack).
+- **FINAL rehearsal run 36151570959 — ALL STEPS GREEN** (verified against
+  the Checks API on 2026-09-25): quality gates incl. 100k scale → bundle →
+  Electron-ABI rebuild → packaging → postdist checksums → checksum
+  re-verification → clean-boot (in-app "context ready" marker + userData
+  created) → NSIS silent install/uninstall round-trip → artifact upload →
+  publish correctly skipped for the `-rc1` tag → manifest recorded to
+  `ci-logs/manifests/v1.0.0-rc1/`.
+
+Artifact evidence (rehearsal commit `234c4a7`):
+
+| File | Bytes | SHA-256 |
+| --- | --- | --- |
+| Dentiva Pro-1.0.0-win-x64-setup.exe | 87,885,975 | ff7dcc42b25744ff469b98eb0e48c60da76aba1404f551e1ba6f7161a977048b |
+| Dentiva Pro-1.0.0-win-x64-portable.exe | 87,658,321 | 10b70f0557ac18f46d03c7114d0c482e5e6e918f46088c4badf1364fa481677b |
+| Dentiva Pro-1.0.0-win-x64.zip | 120,042,333 | f812933a48f39834f5a02b5307a359fcba27c59b7b0c182c4d379b2ae3494443 |
+| Dentiva Pro-1.0.0-win-x64-setup.exe.blockmap | 93,509 | cf7f06f99233af17074119139764e1f60997da0ada241b1e52554a56e0abadcd |
+
+Cross-checks: manifest vs SHA256SUMS.txt match (same values, machine-written
+by scripts/postdist.cjs); Actions API confirms uploaded run artifact
+`dentiva-pro-windows-v1.0.0-rc1-1` (422,058,919 B, unexpired). Byte-level
+download INTO this sandbox is impossible (GitHub blob hosts blocked); the CI
+in-job `Verify SHA256SUMS.txt covers every artifact` step recomputes each
+hash on the runner itself.
 
 ## 6. Sign-off rule
 

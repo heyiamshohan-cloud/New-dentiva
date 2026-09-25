@@ -71,21 +71,20 @@ publishing). Rehearsal campaign on tag `v1.0.0-rc1` (9 iterations, run ids
    extract-zip/zod) actually ship.
 6. Clean-boot step: GUI-subsystem processes reject std-handle redirection —
    polling loop now watches PID + userData (≤90 s) instead.
-Final rehearsal run **36146099881 passed every step** — quality gates (incl.
-100k scale), bundle, electron-ABI native rebuild, packaging (NSIS + portable
-+ ZIP), postdist `SHA256SUMS.txt` + `release-manifest.json`, checksum
-re-verification, portable clean-boot on the fresh runner, NSIS silent
-install/uninstall round-trip, artifact upload. Diagnostics path: on failure
-the workflow pushes `logs/*.log` to the `ci-logs` branch (GitHub asset hosts
-are blocked from this sandbox; the git host is not).
-Note: GH token for this sandbox expired right after the run — confirm step
-details at https://github.com/heyiamshohan-cloud/New-dentiva/actions/runs/36146099881
-and delete/re-point tag `v1.0.0-rc1` before the real release.
+**FINAL verified rehearsal: run 36151570959 (v1.0.0-rc1 @ 234c4a7, all 10
+applicable steps green).** Two further real defects were found & fixed after
+an earlier note incorrectly claimed green: (a) boot diagnostics/step-order +
+GUI redirect assumptions; (b) packaged app crashed at first boot with
+"Cannot find module 'archiver-utils'" (screenshot-evidenced, run 36150749531)
+→ pure-JS deps now inlined into the main bundle. Full corrected evidence
+table: docs/FINAL_RELEASE_REPORT.md §5. Artifacts + SHA-256 manifest:
+`ci-logs/manifests/v1.0.0-rc1/`. Diagnostics flow: on failure the workflow
+pushes logs/screenshots to branch `ci-logs`; on success the manifest.
 
-Release procedure now: gates green → merge to main →
-`git tag -a v1.0.0 -m "Dentiva Pro 1.0.0" && git push origin v1.0.0` →
-the workflow builds, verifies, and publishes the GitHub Release with
-`docs/RELEASE_NOTES.md`.
+Release procedure now: PR arena branch → main (merge) →
+`git tag -a v1.0.0 -m "Dentiva Pro 1.0.0" <merge-sha> && git push origin v1.0.0`
+→ release.yml runs the whole pipeline and PUBLISHES the GitHub Release
+(final tag has no `-` suffix).
 
 ## Release blockers (live list)
 
