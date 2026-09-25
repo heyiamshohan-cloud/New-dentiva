@@ -66,6 +66,23 @@ jobs:
           path: release-builder.log
           retention-days: 7
 
+      # Debug aid: artifact/log download hosts may be unreachable from some
+      # networks, but github.com itself is not — commit the failing log where
+      # anyone with repo access can read it (logs/builder-<run_id>.log).
+      - name: Publish builder log to the ci-logs branch
+        if: failure()
+        shell: pwsh
+        run: |
+          git config user.email actions@github.com
+          git config user.name 'github-actions'
+          git fetch origin ci-logs
+          if ($LASTEXITCODE -eq 0) { git checkout ci-logs } else { git checkout --orphan ci-logs }
+          New-Item -ItemType Directory -Force 'logs' | Out-Null
+          Copy-Item release-builder.log "logs/builder-${{ github.run_id }}.log"
+          git add logs/
+          git commit -m "builder log — run ${{ github.run_id }}" 
+          git push origin ci-logs
+
       - name: Verify SHA256SUMS.txt covers every artifact
         shell: pwsh
         run: |
