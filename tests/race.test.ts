@@ -32,10 +32,10 @@ describe('race conditions & crash recovery', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dentiva-race-'));
     const a = new AppContext(dir);
     cleanups.push(() => { try { a.close(); } catch { /* already closed */ } });
-    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 }));
     seedBasic(a);
     const b = new AppContext(dir);
     cleanups.push(() => { try { b.close(); } catch { /* already closed */ } });
+    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 }));
     const seen = new Set<string>();
     for (let i = 0; i < 25; i++) {
       const pa = a.services.patients.create('a', { fullName: `Writer A ${i}` });
@@ -74,7 +74,6 @@ describe('race conditions & crash recovery', () => {
   it('close during write, then restart: database stays valid and consistent', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dentiva-crash-'));
     const ctx = new AppContext(dir);
-    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 }));
     seedBasic(ctx);
     const patient = ctx.services.patients.search({ text: 'Rahim' }).rows[0];
     ctx.services.billing.createInvoice('t', { patientId: patient.id, items: [{ description: 'X', qty: 1, unitPrice: '100' }] });
@@ -82,6 +81,7 @@ describe('race conditions & crash recovery', () => {
 
     const ctx2 = new AppContext(dir);
     cleanups.push(() => { try { ctx2.close(); } catch { /* already closed */ } });
+    cleanups.push(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 150 }));
     expect(integrityCheck(ctx2.db).ok).toBe(true);
     expect(ctx2.services.billing.listInvoices({ patientId: patient.id }).total).toBe(1);
     expect(ctx2.services.patients.search({ text: 'Rahim' }).total).toBe(1);
