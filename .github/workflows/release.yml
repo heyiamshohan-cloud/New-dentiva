@@ -108,9 +108,15 @@ jobs:
                 $wild = Get-ChildItem $r -Directory -Filter '*entiva*' -ErrorAction SilentlyContinue | Select-Object -First 1
                 if ($wild) { $dataDir = $wild.FullName; break }
               }
-              if ($dataDir) { $alive = $true; break }
+              if ($dataDir -and (Test-Path "$env:TEMP\dentiva-boot.log")) {
+                if ((Get-Content "$env:TEMP\dentiva-boot.log" -Raw) -match 'context ready') { $alive = $true; break }
+              }
             }
             "after poll: HasExited=$($p.HasExited) ExitCode=$($p.HasExited ? $p.ExitCode : 'n/a') dataDir=$dataDir cycles=$i" | Out-File boot-diagnostics.log -Append
+            if (Test-Path "$env:TEMP\dentiva-boot.log") {
+              '--- in-app boot log ($TEMP\dentiva-boot.log) ---' | Out-File boot-diagnostics.log -Append
+              Get-Content "$env:TEMP\dentiva-boot.log" | Out-File boot-diagnostics.log -Append
+            }
             Get-Process | Where-Object { $_.ProcessName -like '*entiva*' } | Format-Table | Out-File boot-diagnostics.log -Append
             if ($p.HasExited) { throw "Dentiva Pro exited early (code $($p.ExitCode)) — first-run boot FAILED" }
             if (-not $alive) { throw 'userData directory not created within 90s (app is alive but silent — see boot-electron.log)' }

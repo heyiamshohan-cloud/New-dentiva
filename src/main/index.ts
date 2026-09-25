@@ -1,6 +1,7 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, dialog, shell } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { AppContext } from './context';
 import { registerIpc } from './ipc';
 
@@ -12,6 +13,18 @@ import { registerIpc } from './ipc';
 const isDev = !!process.env.ELECTRON_RENDERER_URL;
 let ctx: AppContext | null = null;
 let mainWindow: BrowserWindow | null = null;
+
+/** Append-only boot trace in the OS temp dir: invisible to users, lets support
+ * (and CI clean-boot tests) see exactly how far startup got on any machine. */
+const bootLogPath = path.join(os.tmpdir(), 'dentiva-boot.log');
+function bootLog(msg: string): void {
+  try {
+    fs.appendFileSync(bootLogPath, `${new Date().toISOString()} ${msg}\n`);
+  } catch {
+    // never block startup on diagnostics
+  }
+  console.log(`[dentiva:boot] ${msg}`);
+}
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -25,8 +38,11 @@ if (!gotLock) {
   });
 
   void app.whenReady().then(async () => {
+  try {
     const dataDir = path.join(app.getPath('userData'));
+    bootLog(`start v${app.getVersion()} platform=${process.platform} arch=${process.arch} userData=${dataDir}`);
     ctx = new AppContext(dataDir, app.getVersion());
+    bootLog('context ready (database open, migrations applied)');
 
     mainWindow = new BrowserWindow({
       width: 1440,
@@ -74,6 +90,19 @@ if (!gotLock) {
     } catch (e) {
       console.error('[dentiva] notification refresh failed', e);
     }
+    bootLog('window ready (renderer loaded)');
+  } catch (e) {
+    const err = e as Error;
+    bootLog(`FATAL startup failed: ${err.stack ?? String(err)}`);
+    try {
+      dialog.showErrorBox('Dentiva Pro could not start', `Startup failed. Details were written to:
+${bootLogPath}
+
+${err.message}`);
+    } finally {
+      app.exit(1);
+    }
+  }
   });
 
   app.on('window-all-closed', () => {
