@@ -189,10 +189,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
+          # pwsh does not glob-expand for native commands — enumerate explicitly.
+          $files = Get-ChildItem -Path release -File | ForEach-Object { $_.FullName }
+          Write-Host "Attaching $($files.Count) release files"
           gh release create ${{ github.ref_name }} --verify-tag `
             --title "Dentiva Pro ${{ github.ref_name }}" `
             --notes-file docs/RELEASE_NOTES.md `
-            release/*
+            $files
 
       # Debug aid (MOVES with the job's end so if:failure() sees every step):
       # artifact/log download hosts may be unreachable from some networks, but
