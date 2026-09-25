@@ -69,9 +69,9 @@ jobs:
           retention-days: 7
 
       # Debug aid: artifact/log download hosts may be unreachable from some
-      # networks, but github.com itself is not — commit the failing log where
-      # anyone with repo access can read it (logs/builder-<run_id>.log).
-      - name: Publish builder log to the ci-logs branch
+      # networks, but github.com itself is not — commit failure diagnostics
+      # (builder log, boot diagnostics) where anyone with repo access can read.
+      - name: Publish failure diagnostics to the ci-logs branch
         if: failure()
         shell: pwsh
         run: |
@@ -80,12 +80,13 @@ jobs:
           git fetch origin ci-logs
           if ($LASTEXITCODE -eq 0) { git checkout ci-logs } else { git checkout --orphan ci-logs }
           New-Item -ItemType Directory -Force 'logs' | Out-Null
-          if (-not (Test-Path 'release-builder.log')) { 'builder log was not captured' | Out-File -FilePath release-builder.log -Encoding utf8 }
-          Copy-Item release-builder.log "logs/builder-${{ github.run_id }}.log" -Force -Verbose
+          foreach ($f in @('release-builder.log', 'boot-diagnostics.log')) {
+            if (Test-Path $f) { Copy-Item $f "logs/$($f -replace '\.log$','')-${{ github.run_id }}.log" -Force }
+          }
           Get-ChildItem logs/ | Format-Table -AutoSize
-          git add -f "logs/builder-${{ github.run_id }}.log"
+          git add -f logs/
           git status --short
-          git commit -m "builder log — run ${{ github.run_id }}"
+          git commit -m "failure diagnostics — run ${{ github.run_id }}"
           git push origin ci-logs
 
       - name: Verify SHA256SUMS.txt covers every artifact
@@ -104,19 +105,33 @@ jobs:
       - name: Clean-boot verification (portable exe, first run on this machine)
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path release -Filter '*portable*.exe' | Select-Object -First 1
-          if (-not $exe) { throw 'portable exe not found in release/' }
-          Write-Host "Booting $($exe.Name) (PID watch, GUI-subsystem: no std-handle redirection possible)"
-          $p = Start-Process -FilePath $exe.FullName -PassThru
-          Start-Sleep -Seconds 30
-          if ($p.HasExited) { throw "Dentiva Pro exited early (code $($p.ExitCode)) — first-run boot FAILED" }
-          $roots = @($env:APPDATA, $exe.Directory.FullName)
-          $dataDir = $roots | ForEach-Object { Join-Path $_ 'Dentiva Pro' } | Where-Object { Test-Path $_ } | Select-Object -First 1
-          if (-not $dataDir) { Stop-Process -Id $p.Id -Force; throw 'userData directory was not created' }
-          Write-Host "OK: alive after 30s, data at $dataDir"
-          Get-ChildItem $dataDir -Recurse -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table
-          Stop-Process -Id $p.Id -Force
-          Get-Process 'Dentiva Pro' -ErrorAction SilentlyContinue | Stop-Process -Force
+          try {
+            $exe = Get-ChildItem -Path release -Filter '*portable*.exe' | Select-Object -First 1
+            if (-not $exe) { throw 'portable exe not found in release/' }
+            "booting: $($exe.FullName)" | Out-File boot-diagnostics.log
+            Get-Process | Where-Object { $_.ProcessName -like '*entiva*' } | Format-Table | Out-File boot-diagnostics.log -Append
+            $p = Start-Process -FilePath $exe.FullName -PassThru
+            "started pid=$($p.Id)" | Out-File boot-diagnostics.log -Append
+            $alive = $false
+            foreach ($i in 1..18) {
+              Start-Sleep -Seconds 5
+              if ($p.HasExited) { break }
+              $roots = @($env:APPDATA, $env:LOCALAPPDATA, $exe.Directory.FullName)
+              $dataDir = $roots | ForEach-Object { Join-Path $_ 'Dentiva Pro' } | Where-Object { Test-Path $_ } | Select-Object -First 1
+              if ($dataDir) { $alive = $true; break }
+            }
+            "after poll: HasExited=$($p.HasExited) ExitCode=$($p.HasExited ? $p.ExitCode : 'n/a') dataDir=$dataDir" | Out-File boot-diagnostics.log -Append
+            Get-Process | Where-Object { $_.ProcessName -like '*entiva*' } | Format-Table | Out-File boot-diagnostics.log -Append
+            if ($p.HasExited) { throw "Dentiva Pro exited early (code $($p.ExitCode)) — first-run boot FAILED" }
+            if (-not $alive) { throw "userData directory not created within 90s (checked APPDATA/LOCALAPPDATA/exe-dir)" }
+            Write-Host "OK: alive, data at $dataDir"
+            Get-ChildItem $dataDir -Recurse -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table
+            Get-Process | Where-Object { $_.ProcessName -like '*entiva*' } | Stop-Process -Force -ErrorAction SilentlyContinue
+          } catch {
+            $_ | Out-File boot-diagnostics.log -Append
+            Get-ChildItem $env:APPDATA, $env:LOCALAPPDATA -ErrorAction SilentlyContinue | Select-Object -First 30 Name | Format-Table | Out-File boot-diagnostics.log -Append
+            throw
+          }
 
       - name: NSIS silent install + uninstall verification
         shell: pwsh
