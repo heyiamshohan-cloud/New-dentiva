@@ -8,10 +8,9 @@ copyright: Copyright © 2026 Dentiva
 directories:
   output: release
   buildResources: build
-files:
-  - out/**
-  - package.json
-  - "!**/*.map"
+# No explicit `files:` list — the default keeps the whole app plus ALL
+# production dependencies (main bundle loads better-sqlite3/archiver/
+# extract-zip/zod externally via electron-vite's externalizeDepsPlugin).
 asarUnpack:
   - node_modules/better-sqlite3/**
 win:
@@ -37,10 +36,13 @@ nsis:
   artifactName: "${productName}-${version}-win-x64-setup.${ext}"
 portable:
   artifactName: "${productName}-${version}-win-x64-portable.${ext}"
-zip:
-  artifactName: "${productName}-${version}-win-x64.zip"
+# zip is a plain target (unknown as a top-level config section — removed);
+# its artifact gets the win-level artifactName (${target} → zip).
 electronDownload:
   cache: node_modules/.cache/electron
-npmRebuild: true
+# Native rebuild for the Electron ABI is done explicitly in CI (npm run
+# rebuild:native) BEFORE packaging — rebuilding here too would only duplicate
+# it and breaks cross-platform dry runs.
+npmRebuild: false
 publish: null
 afterAllArtifactBuild: scripts/postdist.cjs
