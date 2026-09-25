@@ -1,0 +1,83 @@
+name: Release
+
+# Triggered by pushing a version tag, e.g.:  git tag -a v1.0.0 -m "Dentiva Pro 1.0.0" && git push origin v1.0.0
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: write
+
+env:
+  # No signing certificates are configured yet — do not hunt for them.
+  CSC_IDENTITY_AUTO_DISCOVERY: false
+
+jobs:
+  windows-release:
+    name: Windows x64 artifacts + GitHub Release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Quality gates (must all pass before packaging)
+        run: |
+          npm run typecheck
+          npm test
+          npm run smoke
+          npm run audit:static
+          npm run perf
+          npm run scale -- 100000 3
+
+      - name: Production bundle
+        run: npm run build
+
+      - name: Rebuild better-sqlite3 for the Electron ABI
+        run: npm run rebuild:native
+
+      - name: Package NSIS installer + portable + ZIP (+ SHA256SUMS via postdist)
+        run: npx electron-builder --win --x64 --publish never
+
+      - name: Clean-boot verification (portable exe on a fresh machine context)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path release -Filter '*portable*.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'portable.exe not found in release/' }
+          Write-Host "Booting $($exe.Name)"
+          $env:ELECTRON_ENABLE_LOGGING = '1'
+          $p = Start-Process -FilePath $exe.FullName -PassThru `
+            -RedirectStandardError "$env:TEMP\dentiva-stderr.log"
+          Start-Sleep -Seconds 30
+          if ($p.HasExited) {
+            Get-Content "$env:TEMP\dentiva-stderr.log" -ErrorAction SilentlyContinue
+            throw "Dentiva Pro exited early (code $($p.ExitCode)) — first-run boot FAILED"
+          }
+          $dataDir = Join-Path $env:APPDATA 'Dentiva Pro'
+          if (-not (Test-Path $dataDir)) { Stop-Process -Id $p.Id -Force; throw "userData directory not created: $dataDir" }
+          Write-Host "OK: app is alive after 30s and created $dataDir"
+          Get-ChildItem $dataDir -Recurse | Select-Object FullName, Length | Format-Table
+          Stop-Process -Id $p.Id -Force
+          Get-Process 'Dentiva Pro' -ErrorAction SilentlyContinue | Stop-Process -Force
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dentiva-pro-windows-${{ github.ref_name }}
+          path: release/*
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          gh release create ${{ github.ref_name }} --verify-tag `
+            --title "Dentiva Pro ${{ github.ref_name }}" `
+            --notes-file docs/RELEASE_NOTES.md `
+            release/*

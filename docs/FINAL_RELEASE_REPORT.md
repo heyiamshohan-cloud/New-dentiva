@@ -34,7 +34,7 @@ Numeric claims above come from direct tool output on the stated date, not estima
 
 | Item | Impact | Plan |
 | --- | --- | --- |
-| Windows installer/portable/ZIP not rebuilt from this commit in-sandbox | Artifact may not reflect current source | Build per `docs/RELEASE.md` on network-enabled host |
+| Windows installer/portable/ZIP not rebuilt in-sandbox (probed: electron binary absent, GitHub asset hosts TLS-blocked) | Artifact may not reflect current source | **Automated**: `.github/workflows/release.yml` builds, checksummes, clean-boot tests and publishes on tag push |
 | rcedit icon embedding unavailable without Wine/Windows | Default Electron icon if built on bare Linux | Use Windows runner (or Wine) for packaging |
 | Code signing not configured | SmartScreen warning for unsigned installer | Acquire EV/OV cert before commercial distribution |
 | Clean-machine protocol not yet executed | Real-world first-run unverified | Execute `docs/RELEASE.md` §5 and record results here |

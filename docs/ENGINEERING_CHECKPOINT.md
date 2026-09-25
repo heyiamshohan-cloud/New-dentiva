@@ -42,20 +42,32 @@ This file is the always-current resume point. Read it first when continuing work
   tests fail with "Could not locate the bindings file". For packaging, run
   `npm run rebuild:native` (electron-builder install-app-deps) to target the
   Electron ABI instead; then rebuild for Node again before running vitest.
-- Outbound network to github.com/asset hosts is blocked in this sandbox; the
-  npm registry IS reachable. Windows installer rebuild is documented in
-  `docs/RELEASE.md` and must run where electron-builder can download the
-  Electron/winCodeSign/NSIS toolchains (or with a pre-seeded
-  `ELECTRON_BUILDER_CACHE`).
-- Wine is unavailable in this sandbox: `rcedit` icon embedding cannot be
-  executed here. Do it on a Windows runner (CI) or accept the default icon.
+- Probed 2026-09-25: `node_modules/electron/dist` is EMPTY (binary download
+  wiped per snapshot), no wine/xvfb, `objects.githubusercontent.com` and
+  npmmirror both TLS-blocked; only registry.npmjs.org + github.com HTML work.
+  Consequence: no local packaging of ANY platform in this sandbox — use CI.
+
+## Release path now automated
+
+- `.github/workflows/ci.yml` — every push/PR on ubuntu-latest: npm ci →
+  typecheck → 81 tests → smoke → static audit → perf → 10k scale → bundle.
+- `.github/workflows/release.yml` — on tag `v*.*.*` (windows-latest): full
+  gates incl. 100k scale → bundle → electron-ABI native rebuild →
+  electron-builder (NSIS + portable + ZIP per `electron-builder.yml`) →
+  `SHA256SUMS.txt` + manifest via `scripts/postdist.cjs` → clean-boot test
+  (launches the portable exe on the runner, asserts 30 s liveness + userData
+  creation, then kills it) → artifact upload → `gh release create` with all
+  of `release/*` and `docs/RELEASE_NOTES.md` as notes.
+
+  Release procedure shrinks to: keep gates green → `git tag -a v1.0.0 -m "…"`
+  → `git push origin v1.0.0` → watch the run.
 
 ## Release blockers (live list)
 
 | # | Blocker | Status |
 | --- | --- | --- |
-| 1 | Windows artifacts (NSIS installer, portable, ZIP + SHA-256 sums) rebuilt from THIS commit | **Open** — requires network-enabled build host |
-| 2 | Clean-machine install/run verification of installer on a real Windows box | Open — depends on #1 |
+| 1 | Windows artifacts built from the release commit | Path automated in `release.yml` — closes on first tag push |
+| 2 | Clean-machine install/run verification | Portable-exe boot test automated in CI; NSIS silent-install step and a physical-machine pass per `docs/RELEASE.md` §5 still pending the first produced artifact |
 | 3 | Signed executables (code-signing cert) | Open — commercial decision |
 
 No code-level blockers remain.
