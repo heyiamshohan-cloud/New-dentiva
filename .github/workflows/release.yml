@@ -1,9 +1,15 @@
 name: Release
 
-# Triggered by pushing a version tag, e.g.:  git tag -a v1.0.0 -m "Dentiva Pro 1.0.0" && git push origin v1.0.0
+# Two ways to run:
+#   1. Push a version tag:  git tag -a v1.0.0 -m "Dentiva Pro 1.0.0" && git push origin v1.0.0
+#      → builds artifacts, verifies them, publishes a GitHub Release.
+#   2. Actions → Release → Run workflow (manual)
+#      → identical build + verification, artifacts uploaded as a GitHub Actions
+#        artifact only — NOTHING is published. Use this as the rehearsal.
 on:
   push:
     tags: ['v*.*.*']
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,7 +20,7 @@ env:
 
 jobs:
   windows-release:
-    name: Windows x64 artifacts + GitHub Release
+    name: Windows x64 artifacts
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,11 +51,24 @@ jobs:
       - name: Package NSIS installer + portable + ZIP (+ SHA256SUMS via postdist)
         run: npx electron-builder --win --x64 --publish never
 
-      - name: Clean-boot verification (portable exe on a fresh machine context)
+      - name: Verify SHA256SUMS.txt covers every artifact
+        shell: pwsh
+        run: |
+          Push-Location release
+          $sums = Get-Content SHA256SUMS.txt
+          foreach ($line in $sums) {
+            $hash, $name = $line -split '\s+', 2
+            $actual = (Get-FileHash $name -Algorithm SHA256).Hash.ToLower()
+            if ($actual -ne $hash) { throw "checksum mismatch: $name" }
+            Write-Host "OK $name"
+          }
+          Pop-Location
+
+      - name: Clean-boot verification (portable exe, first run on this machine)
         shell: pwsh
         run: |
           $exe = Get-ChildItem -Path release -Filter '*portable*.exe' | Select-Object -First 1
-          if (-not $exe) { throw 'portable.exe not found in release/' }
+          if (-not $exe) { throw 'portable exe not found in release/' }
           Write-Host "Booting $($exe.Name)"
           $env:ELECTRON_ENABLE_LOGGING = '1'
           $p = Start-Process -FilePath $exe.FullName -PassThru `
@@ -59,20 +78,46 @@ jobs:
             Get-Content "$env:TEMP\dentiva-stderr.log" -ErrorAction SilentlyContinue
             throw "Dentiva Pro exited early (code $($p.ExitCode)) — first-run boot FAILED"
           }
-          $dataDir = Join-Path $env:APPDATA 'Dentiva Pro'
-          if (-not (Test-Path $dataDir)) { Stop-Process -Id $p.Id -Force; throw "userData directory not created: $dataDir" }
-          Write-Host "OK: app is alive after 30s and created $dataDir"
-          Get-ChildItem $dataDir -Recurse | Select-Object FullName, Length | Format-Table
+          $roots = @($env:APPDATA, $exe.Directory.FullName)
+          $dataDir = $roots | ForEach-Object { Join-Path $_ 'Dentiva Pro' } | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $dataDir) { Stop-Process -Id $p.Id -Force; throw 'userData directory was not created' }
+          Write-Host "OK: alive after 30s, data at $dataDir"
+          Get-ChildItem $dataDir -Recurse -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table
           Stop-Process -Id $p.Id -Force
           Get-Process 'Dentiva Pro' -ErrorAction SilentlyContinue | Stop-Process -Force
+
+      - name: NSIS silent install + uninstall verification
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem -Path release -Filter '*setup.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'setup.exe not found in release/' }
+          Write-Host "Installing $($setup.Name) silently"
+          $i = Start-Process -FilePath $setup.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($i.ExitCode -ne 0) { throw "installer exit code $($i.ExitCode)" }
+          $installRoot = Join-Path $env:LOCALAPPDATA 'Programs\Dentiva Pro'
+          $appExe = Join-Path $installRoot 'Dentiva Pro.exe'
+          if (-not (Test-Path $appExe)) { throw "app executable missing after install: $appExe" }
+          Write-Host "OK: installed to $installRoot"
+          $unins = Get-ChildItem $installRoot -Filter '*ninstall*.exe' | Select-Object -First 1
+          if (-not $unins) { throw 'uninstaller not found' }
+          Write-Host "Uninstalling silently via $($unins.Name)"
+          $u = Start-Process -FilePath $unins.FullName -ArgumentList '/S' -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "uninstaller exit code $($u.ExitCode)" }
+          Start-Sleep -Seconds 10
+          if (Test-Path $appExe) { throw 'app executable still present after uninstall' }
+          Write-Host 'OK: silent install/uninstall round-trip verified'
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dentiva-pro-windows-${{ github.ref_name }}
+          name: dentiva-pro-windows-${{ github.ref_name }}-${{ github.run_attempt }}
           path: release/*
+          retention-days: 30
 
+      # Only a final tag (v1.0.0, no prerelease suffix) publishes. Pre-release
+      # tags (v1.0.0-rc1 …) and manual runs rehearse everything above.
       - name: Create GitHub Release
+        if: github.event_name == 'push' && startsWith(github.ref_name, 'v') && !contains(github.ref_name, '-')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
