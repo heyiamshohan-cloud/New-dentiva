@@ -1,0 +1,13 @@
+  • electron-builder  version=25.1.8 os=10.0.26100
+  • loaded configuration  file=D:\a\New-dentiva\New-dentiva\electron-builder.yml
+  • skipped dependencies rebuild  reason=npmRebuild is set to false
+  • packaging       platform=win32 arch=x64 electron=34.5.8 appOutDir=release\win-unpacked
+  • downloading     url=https://github.com/electron/electron/releases/download/v34.5.8/electron-v34.5.8-win32-x64.zip size=116 MB parts=8
+  • downloaded      url=https://github.com/electron/electron/releases/download/v34.5.8/electron-v34.5.8-win32-x64.zip duration=336ms
+  • updating asar integrity executable resource  executablePath=release\win-unpacked\Dentiva Pro.exe
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z size=5.6 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z duration=132ms
+  • signing with signtool.exe  path=release\win-unpacked\Dentiva Pro.exe
+  • no signing info identified, signing is skipped  signHook=false cscInfo=null
+  ⨯ cannot expand pattern "${productName}-${version}-win-x64-${target}.${ext}": macro target is not defined
+
