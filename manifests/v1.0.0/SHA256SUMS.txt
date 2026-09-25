@@ -1,0 +1,4 @@
+d3d0fe15f09852dfda1a7e3c53b34d610d21bb245bcc71a07d050735343c318b  Dentiva Pro-1.0.0-win-x64-portable.exe
+43f970b9e8596bbeb49fdcba84ae4747fbd15707d441b728b2e8d4caf5e86852  Dentiva Pro-1.0.0-win-x64-setup.exe
+59de9756ad409a88fd35931e71d3f8d924e3418b582263d16968a28a01c4a006  Dentiva Pro-1.0.0-win-x64-setup.exe.blockmap
+58a53fdd625b1b67a4bb7f33222e2d87cbcb212e532d26420dbd07bd68696ba6  Dentiva Pro-1.0.0-win-x64.zip
