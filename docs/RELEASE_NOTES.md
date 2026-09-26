@@ -15,6 +15,9 @@ Verify integrity before installing: download every file, then on Windows
 ## Highlights
 
 - Fully offline: no internet needed for any feature; no telemetry, no external APIs
+- First-launch product activation: enter the serial supplied with your licence — verified locally
+  against a sealed digest, bound to this machine, lockout on repeated failures. Activation ID
+  (Diagnostics) is what you quote to support when moving to a new computer
 - Patients with unique codes, duplicate warnings, full Patient 360 (clinical + financial)
 - FDI dental chart (adult & primary), structured visits, paper-faithful prescriptions with zero financial data
 - Appointments with dentist/chair/room conflict detection and a live daily queue
@@ -27,9 +30,11 @@ Verify integrity before installing: download every file, then on Windows
 
 ## Verification state at release
 
-- 81/81 automated tests across 13 suites — passing
-- End-to-end "clinic day" smoke scenario — all 13 stages passing
-- Static security audit — clean
+- 97/97 automated tests across 14 suites — passing
+- End-to-end "clinic day" smoke scenario — all 14 stages passing (incl. activation round-trip)
+- Static security audit — clean (9 gates: offline, secrets, placeholders, money, SQL, IPC bridge,
+  route parity, hardening, activation confidentiality)
+- Scale: 100,000 patients and a 3,000-event lifetime timeline — every entry reachable, in budget
 - Continues to respond within latency budgets at 100,000 patients
 
 ## Known notes for this build

@@ -30,6 +30,8 @@ import { BackupService, DbProvider } from './services/backup';
 import { DataTransferService } from './services/dataTransfer';
 import { DiagnosticsService } from './services/diagnostics';
 import { AuthService } from './services/auth';
+import { ActivationManager, ActivationKeyring } from './security/activation';
+import { PRODUCTION_ACTIVATION_KEYRING } from './security/activation.keys';
 
 export interface ServiceContainer {
   audit: AuditService;
@@ -71,6 +73,7 @@ export class AppContext implements DbProvider {
   readonly dataDir: string;
   readonly attachmentsDir: string;
   readonly backupDir: string;
+  readonly activation: ActivationManager;
   readonly session = new SessionManager();
   readonly backup: BackupService;
   private handle: DbHandle;
@@ -87,8 +90,9 @@ export class AppContext implements DbProvider {
     return path.join(dataDir, fallbackName);
   }
 
-  constructor(dataDir: string, private appVersion = '1.0.0') {
+  constructor(dataDir: string, private appVersion = '1.0.0', activationKeyring: ActivationKeyring = PRODUCTION_ACTIVATION_KEYRING) {
     this.dataDir = dataDir;
+    this.activation = new ActivationManager(dataDir, activationKeyring);
     this.attachmentsDir = AppContext.resolveDirectory(dataDir, 'DENTIVA_ATTACHMENTS_DIR', 'attachments');
     this.backupDir = AppContext.resolveDirectory(dataDir, 'DENTIVA_BACKUP_DIR', 'backups');
     fs.mkdirSync(this.attachmentsDir, { recursive: true });

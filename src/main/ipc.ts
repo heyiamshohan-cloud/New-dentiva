@@ -186,7 +186,10 @@ const routes: Record<string, Route> = {
   'patients.create': { permission: 'patients.create', handler: (ctx, actor, p) => ctx.services.patients.create(actor.username, p.input as PatientInput, { skipDuplicateCheck: !!p.skipDuplicateCheck }) },
   'patients.update': { permission: 'patients.update', handler: (ctx, actor, p) => ctx.services.patients.update(actor.username, Number(p.id), p.input as PatientInput) },
   'patients.archive': { permission: 'patients.archive', handler: (ctx, actor, p) => ctx.services.patients.setArchived(actor.username, Number(p.id), !!p.archived) },
-  'patients.timeline': { permission: 'visits.read', handler: (ctx, _a, p) => ctx.services.visits.timeline(Number(p.patientId)) },
+  'patients.timeline': {
+    permission: 'visits.read',
+    handler: (ctx, _a, p) => ctx.services.visits.timeline(Number(p.patientId), Number(p.page ?? 1), Number(p.pageSize ?? 60))
+  },
   'patients.financials': { permission: 'statements.read', handler: (ctx, _a, p) => ctx.services.billing.patientFinancials(Number(p.patientId)) },
   'patients.summary360': {
     permission: 'patients.read',
@@ -405,29 +408,33 @@ const routes: Record<string, Route> = {
       return buildStatementHtml({ ...clinicPayload(ctx), patientName: patient.fullName, patientCode: patient.code, from: String(p.from), to: String(p.to), statement: st }, (p.size as PaperSize) ?? 'A4');
     }
   },
-  'documents.assets': {
-    permission: 'documents.print',
-    handler: (ctx) => {
-      const clinic = ctx.services.clinic.get();
-      const logoPath = clinic.logoPath;
-      let logoDataUrl: string | null = null;
-      if (logoPath && fs.existsSync(logoPath)) {
-        const ext = path.extname(logoPath).toLowerCase() === '.png' ? 'png' : 'jpeg';
-        logoDataUrl = `data:image/${ext};base64,${fs.readFileSync(logoPath).toString('base64')}`;
+
+  // ------------------------------------------------------------ activation
+  'activation.status': {
+    permission: 'open',
+    handler: (ctx) => ctx.activation.status()
+  },
+  'activation.activate': {
+    permission: 'open',
+    handler: (ctx, _a, p) => {
+      try {
+        const out = ctx.activation.activate(typeof p.serial === 'string' ? p.serial : '');
+        ctx.services.audit.record('system', 'activation.completed', 'activation', '', {});
+        return out;
+      } catch (e) {
+        // Audit the attempt, never the input: messages above are constant.
+        ctx.services.audit.record('system', 'activation.rejected', 'activation', '', { reason: e instanceof AppError ? e.code : 'error' });
+        throw e;
       }
-      return { clinic, logoDataUrl };
     }
   },
 
-  // ------------------------------------------------------------------- window
-  'win.setTitle': { permission: 'auth', handler: (_ctx, _a, p) => ({ ok: true, title: String(p.title ?? '') }) },
-  'win.close': { permission: 'auth', handler: () => ({ ok: true }) },
-  'win.minimize': { permission: 'auth', handler: () => ({ ok: true }) },
-  'app.info': { permission: 'open', handler: () => ({ name: 'Dentiva Pro', version: app.getVersion(), dataDir: app.getPath('userData'), exeRoot: serverExeRoot() }) },
-
-  // ------------------------------------------------------------ misc (info)
-  'ui.toast': { permission: 'auth', handler: () => ({ ok: true }) }
+  // ------------------------------------------------------------- misc (info)
 };
+
+/** Channels reachable before activation completes (nothing may read or
+ *  write clinic data until the product is activated on this machine). */
+export const ACTIVATION_EXEMPT = new Set<string>(['activation.status', 'activation.activate', 'app.info']);
 
 function dateStamp(): string {
   const d = new Date();
@@ -444,7 +451,27 @@ function clinicPayload(ctx: AppContext) {
   return { clinic, logoDataUrl };
 }
 
+/**
+ * Shared gate for the two document-render channels that live outside the
+ * routes table because they need Electron facilities (print dialog, PDF).
+ * They are permission-checked exactly like `documents.*Html` (defense in
+ * depth against a compromised/anonymous renderer) and ALWAYS rebuild the
+ * document HTML server-side from the database — raw HTML from the renderer
+ * is never trusted, which also keeps preview and PDF byte-identical in
+ * structure (one template, two outputs).
+ */
+function docActorFor(ctx: AppContext, payload: Record<string, unknown>): Actor {
+  const token = typeof payload?.token === 'string' ? payload.token : undefined;
+  const actor = ctx.session.requireActor(token);
+  if (!roleHas(actor.role, 'documents.print')) {
+    ctx.services.audit.record(actor.username, 'security.forbidden', 'documents', '', { required: 'documents.print' });
+    throw new AppError(ERR.FORBIDDEN, 'Your role does not permit document printing.');
+  }
+  return actor;
+}
+
 async function withDocPdf(ctx: AppContext, payload: Record<string, unknown>): Promise<IpcResult<unknown>> {
+  docActorFor(ctx, payload);
   const channel = String(payload.docKind ?? '');
   const html = await buildDocHtml(ctx, channel, payload);
   if (!html) return { ok: false, error: { code: ERR.VALIDATION, message: 'Unknown document kind.' } };
@@ -452,12 +479,14 @@ async function withDocPdf(ctx: AppContext, payload: Record<string, unknown>): Pr
   const suggestedName = sanitizeFileName(String(payload.suggestedName ?? `${channel}-${dateStamp()}.pdf`));
   let outPath = payload.path != null ? String(payload.path) : defaultExportPath(suggestedName);
   if (!outPath.toLowerCase().endsWith('.pdf')) outPath += '.pdf';
-  const buf = await htmlToPdf(html, size);
+  const docLabel = channel.charAt(0).toUpperCase() + channel.slice(1);
+  const buf = await htmlToPdf(html, size, docLabel);
   await fs.promises.writeFile(outPath, buf);
   return { ok: true, data: { path: outPath, sha256: sha256Hex(buf), bytes: buf.length } };
 }
 
 async function withDocPrint(ctx: AppContext, payload: Record<string, unknown>): Promise<IpcResult<unknown>> {
+  docActorFor(ctx, payload);
   const channel = String(payload.docKind ?? '');
   const html = await buildDocHtml(ctx, channel, payload);
   if (!html) return { ok: false, error: { code: ERR.VALIDATION, message: 'Unknown document kind.' } };
@@ -537,11 +566,12 @@ export function registerIpc(ctx: AppContext, getWindow: () => BrowserWindow | nu
     try {
       if (typeof channel !== 'string') return { ok: false, error: { code: ERR.VALIDATION, message: 'Malformed invocation.' } };
 
-      // Window-management pseudo-routes (kept here so the renderer never holds
-      // a BrowserWindow reference itself).
-      if (channel === 'win.minimize') { getWindow()?.minimize(); return ok({ ok: true }); }
-      if (channel === 'win.toggleMaximize') { const w = getWindow(); if (w) { w.isMaximized() ? w.unmaximize() : w.maximize(); } return ok({ ok: true }); }
-      if (channel === 'win.close') { getWindow()?.close(); return ok({ ok: true }); }
+      // Product activation gate — enforced HERE, in the main process, so a
+      // compromised or pre-login renderer cannot reach ANY business channel
+      // until this installation is activated (spec: Serial Activation).
+      if (!ctx.activation.isActivated() && !ACTIVATION_EXEMPT.has(channel)) {
+        return { ok: false, error: { code: ERR.NOT_ACTIVATED, message: 'Dentiva Pro is not activated on this computer yet.' } };
+      }
 
       // Async document I/O routes needing Electron facilities.
       if (channel === 'documents.pdf') return await withDocPdf(ctx, payload);

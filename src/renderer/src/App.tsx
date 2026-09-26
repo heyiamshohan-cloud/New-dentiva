@@ -4,6 +4,7 @@ import { useSession } from './session';
 import { Shell } from './components/shell';
 import { CommandPalette } from './components/CommandPalette';
 import { LoginPage } from './pages/Login';
+import { ActivationPage } from './pages/Activation';
 import { SetupWizard } from './pages/Setup';
 import { LockScreen } from './pages/Lock';
 import { DashboardPage } from './pages/Dashboard';
@@ -34,6 +35,7 @@ export default function App() {
       </div>
     );
   }
+  if (status === 'activating') return <ActivationPage />;
   if (status === 'setup') return <SetupWizard />;
   if (status === 'signedOut') return <LoginPage />;
 

@@ -98,7 +98,20 @@ describe('visits, chart, prescriptions', () => {
     expect(() => ctx.services.visits.create('t', { patientId, toothNumbers: [99] })).toThrow(/FDI/);
     // timeline includes it
     const tl = ctx.services.visits.timeline(patientId);
-    expect(tl.some((e) => e.kind === 'visit' && e.refId === v.id)).toBe(true);
+    expect(tl.rows.some((e) => e.kind === 'visit' && e.refId === v.id)).toBe(true);
+    expect(tl.total).toBe(2); // the visit AND its originating appointment
+    // pagination: full lifetime history is reachable page by page (no caps)
+    ctx.services.visits.create('t', { patientId, visitAt: '2026-04-02T09:00:00Z', chiefComplaint: 'Second' });
+    ctx.services.prescriptions.create('t', { patientId, items: [{ medicineName: 'Amox', form: 'tablet', dose: '500 mg', frequency: '1+1+1', duration: '5 days', timing: 'after food', customInstructions: '', notes: '' }] });
+    const p1 = ctx.services.visits.timeline(patientId, 1, 2);
+    const p2 = ctx.services.visits.timeline(patientId, 2, 2);
+    expect(p1.total).toBe(4); // 2 visits + 1 appointment + 1 prescription
+    expect(p1.rows.length).toBe(2);
+    expect([...p1.rows, ...p2.rows].map((e) => `${e.kind}:${e.refId}`).sort().join()).toBe(
+      [...p1.rows, ...p2.rows].map((e) => `${e.kind}:${e.refId}`).sort().join()
+    ); // deterministic ordering: same pages on refetch
+    expect(new Set([...p1.rows, ...p2.rows].map((e) => `${e.kind}:${e.refId}`)).size).toBe(4); // no dupes, no loss
+    expect(ctx.services.visits.timeline(patientId, 1, 2).rows).toEqual(p1.rows); // deterministic pages
     // follow-up surfaces
     expect(ctx.services.visits.followUpsDue('2026-10-15').length).toBe(1);
   });

@@ -57,7 +57,9 @@ export function DocPreviewDialog(props: {
         filters: [{ name: 'PDF Document', extensions: ['pdf'] }]
       });
       if (!picked.path) { setBusy(null); return; }
-      const res = await api<{ path: string; bytes: number }>('documents.pdf', { html, size, path: picked.path });
+      // The PDF is rebuilt from the database server-side (identical template,
+      // identical inputs) — renderer HTML is display-only and never forwarded.
+      const res = await api<{ path: string; bytes: number }>('documents.pdf', { docKind: props.kind, ...props.payload, size, path: picked.path });
       toast.success(`PDF saved (${Math.round(res.bytes / 1024)} KB) to ${res.path}`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'PDF export failed.');
@@ -69,7 +71,7 @@ export function DocPreviewDialog(props: {
   const print = async () => {
     setBusy('print');
     try {
-      await api('documents.printDoc', { html, size });
+      await api('documents.printDoc', { docKind: props.kind, ...props.payload, size });
       toast.success('Sent to the printer.');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Printing failed.');

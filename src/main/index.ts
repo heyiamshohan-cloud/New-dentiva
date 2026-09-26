@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron';
+import { app, BrowserWindow, dialog, shell, Menu } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -42,16 +42,22 @@ if (!gotLock) {
   void app.whenReady().then(async () => {
   try {
     bootLog('whenReady resolved');
+    // Production: no application menu (Alt-revealed devtools/reload must not
+    // exist in a shipped build). Dev keeps the default menu for debugging.
+    if (!isDev) Menu.setApplicationMenu(null);
     const dataDir = path.join(app.getPath('userData'));
     bootLog(`start v${app.getVersion()} platform=${process.platform} arch=${process.arch} userData=${dataDir}`);
     ctx = new AppContext(dataDir, app.getVersion());
     bootLog('context ready (database open, migrations applied)');
+    // Activation state is logged as a status word only — never serial material.
+    bootLog(`activation: ${ctx.activation.status().activated ? 'activated' : ctx.activation.status().reason}`);
 
     mainWindow = new BrowserWindow({
       width: 1440,
       height: 900,
       minWidth: 1180,
-      minHeight: 700,
+      // Fits a 1280×720 display with the Windows taskbar visible (spec: High-DPI audit).
+      minHeight: 640,
       show: false,
       title: 'Dentiva Pro',
       backgroundColor: '#f4f6f8',
@@ -68,15 +74,23 @@ if (!gotLock) {
 
     registerIpc(ctx, () => mainWindow);
 
-    // Block in-app navigation and external window opening (privacy: nothing
-    // leaves the machine; links open in the user's default browser).
-    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-      if (url.startsWith('https://')) void shell.openExternal(url);
-      return { action: 'deny' };
-    });
-    mainWindow.webContents.on('will-navigate', (event, url) => {
-      if (isDev && url.startsWith(process.env.ELECTRON_RENDERER_URL!)) return;
-      event.preventDefault();
+    // Global hardening for EVERY webContents (main window, print/PDF windows):
+    // no new windows, no navigation away from the app, no devtools in a
+    // packaged build. External https links from the app hand off to the OS
+    // browser via shell.openExternal only.
+    app.on('web-contents-created', (_event, contents) => {
+      contents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith('https://')) void shell.openExternal(url);
+        return { action: 'deny' };
+      });
+      contents.on('will-navigate', (event, url) => {
+        if (isDev && url.startsWith(process.env.ELECTRON_RENDERER_URL!)) return;
+        if (url.startsWith('devtools://') || url.startsWith('file://')) return;
+        event.preventDefault();
+      });
+      if (!isDev) {
+        contents.on('devtools-opened', () => contents.closeDevTools());
+      }
     });
 
     mainWindow.once('ready-to-show', () => mainWindow?.show());

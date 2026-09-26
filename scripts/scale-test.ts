@@ -85,6 +85,42 @@ function main(): void {
     })();
     console.log('  long-history patient seeded (400 visits, 200 settled invoices)');
 
+    // ── deep-history patient: 3,000+ merged timeline entries — deliberately
+    // beyond any fixed per-source cap. Every entry must remain reachable page
+    // by page (spec: no artificial record ceilings, no silent truncation).
+    const deepp = ctx.services.patients.create('admin', { fullName: 'Deep History', sex: 'male', phone: '01700000002', dob: '1960-01-01' });
+    const dbx = ctx.current();
+    dbx.transaction(() => {
+      const insRx = dbx.prepare("INSERT INTO prescriptions (number, patient_id, prescribed_at, created_by, created_at) VALUES (?,?,?,?,?)");
+      const insAp = dbx.prepare("INSERT INTO appointments (number, patient_id, start_at, end_at, status, created_by, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)");
+      for (let i = 0; i < 1300; i++) {
+        const d = new Date(Date.parse('2020-01-01T00:00:00Z') + i * 60_000).toISOString();
+        insRx.run(`RX-DEEP-${i}`, deepp.id, d, 'admin', d);
+        insAp.run(`AP-DEEP-${i}`, deepp.id, d, new Date(Date.parse(d) + 1800_000).toISOString(), 'completed', 'admin', d, d);
+      }
+      for (let i = 0; i < 400; i++) {
+        const d = new Date(Date.parse('2020-01-01T12:00:00Z') + i * 120_000).toISOString();
+        dbx.prepare("INSERT INTO visits (number, patient_id, visit_at, created_at, updated_at, created_by) VALUES (?,?,?,?,?,?)").run(`V-D-${i}`, deepp.id, d, d, d, 'admin');
+      }
+    })();
+    console.log('  deep-history patient seeded (400 visits + 1,300 prescriptions + 1,300 appointments)');
+    const deepPages = ctx.services.visits.timeline(deepp.id, 1, 100);
+    if (deepPages.total !== 3000) throw new Error(`FAIL: deep timeline total ${deepPages.total}, expected 3000 (history silently capped?)`);
+    let seen = 0;
+    let oldest: { at: string } | null = null;
+    time('timeline page walk (3,000 entries, 100/page)', () => {
+      const keys = new Set<string>();
+      for (let p = 1; p <= 30; p++) {
+        const pg = ctx.services.visits.timeline(deepp.id, p, 100);
+        for (const e of pg.rows) { seen++; keys.add(`${e.kind}:${e.refId}`); oldest = e; }
+      }
+      if (keys.size !== 3000) throw new Error(`FAIL: only ${keys.size} unique timeline entries across pages (dupes or gaps)`);
+    }, 1200);
+    if (!oldest || (oldest as { at: string }).at > '2020-01-01T12:02:00Z') {
+      throw new Error('FAIL: the earliest deep-history entry is unreachable (truncated tail)');
+    }
+    console.log('  OK   all 3,000 lifetime entries reachable, dup-free, oldest entry present');
+
     // ── read-path latency budgets ────────────────────────────────────────────
     time('patients.search paged (50/page)', () => ctx.services.patients.search({ text: 'Scale', page: 1, pageSize: 50 }), 250);
     time('patients.select typeahead', () => ctx.services.patients.select('Farhana Scale5', 20), 150);

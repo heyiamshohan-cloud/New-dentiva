@@ -244,6 +244,28 @@ async function main(): Promise<void> {
     // ── Audit trail anchored ────────────────────────────────────────────────
     const auditCount = (ctx.current().prepare('SELECT COUNT(*) n FROM audit_log').get() as { n: number }).n;
     if (auditCount < 20) throw new Error(`audit trail too thin (${auditCount}) after a full clinic day`);
+    await ok('activation: main-process gate wired and behaving (fixture keyring)', async () => {
+      // Wiring: a fresh installation is unactivated until a valid serial is
+      // entered; arbitrary guesses are refused with a constant message; a
+      // fixture keyring proves the full positive path without production
+      // secrets (the real serial never appears in the repo or CI).
+      const { ActivationManager, normalizeSerial } = await import('../src/main/security/activation');
+      const { buildKeyringFor } = await import('./activation-fixture');
+      eq(ctx.activation.status().activated, false, 'fresh install must be unactivated');
+      const fxDir = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-activation-'));
+      const fxSerial = 'SMOKE-9999-1111-2222';
+      const fxKeyring = buildKeyringFor(fxSerial); // one keyring per installation — as production
+      const fx = new ActivationManager(fxDir, fxKeyring);
+      let generic = '';
+      try { fx.activate('wrongserial123456'); } catch (e) { generic = (e as Error).message; }
+      eq(generic, 'This activation serial is not valid for Dentiva Pro.', 'rejection message must be constant');
+      eq(normalizeSerial(' smoke 9999 1111 2222 '), normalizeSerial(fxSerial), 'normalization equivalence');
+      fx.activate(fxSerial);
+      eq(fx.isActivated(), true, 'fixture serial activates');
+      const reopened = new ActivationManager(fxDir, fxKeyring);
+      eq(reopened.isActivated(), true, 'activation survives restart');
+      fs.rmSync(fxDir, { recursive: true, force: true });
+    });
     await ok(`audit: trail anchored at ${auditCount} entries`, async () => {});
   } finally {
     ctx.close();

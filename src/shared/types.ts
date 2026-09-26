@@ -171,7 +171,9 @@ export const ERR = {
   SESSION_LOCKED: 'SESSION_LOCKED',
   INTEGRITY: 'INTEGRITY',
   IO: 'IO',
-  INTERNAL: 'INTERNAL'
+  INTERNAL: 'INTERNAL',
+  NOT_ACTIVATED: 'NOT_ACTIVATED',
+  TOO_MANY_ATTEMPTS: 'TOO_MANY_ATTEMPTS'
 } as const;
 export type ErrCode = (typeof ERR)[keyof typeof ERR];
 
