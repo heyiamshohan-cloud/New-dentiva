@@ -106,6 +106,8 @@ Product is treated as feature-frozen; only defects justify further change.
 
 ## Next exact action
 
-Push `arena/01a0dc41-new-dentiva` → open PR → CI green → merge → tag `v1.0.0` → release.yml
-produces + verifies final artifacts (this branch's commit) → paste run link + hashes into
-docs/FINAL_RELEASE_REPORT.md §7 → ship.
+NONE PENDING — cycle complete. Final commercial build published:
+release v1.0.0 @ e2970b1, pipeline run 36223276395 all steps green, hashes recorded in
+docs/FINAL_RELEASE_REPORT.md §7.6. Product is feature-frozen per the final directive;
+resume work on this checkpoint only if a new defect is discovered (then: reproduce →
+fix → regression test → re-run all gates → re-tag).
