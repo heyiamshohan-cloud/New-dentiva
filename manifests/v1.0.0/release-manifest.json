@@ -2,27 +2,27 @@
   "product": "Dentiva Pro",
   "version": "1.0.0",
   "platform": "win32",
-  "generatedAt": "2026-09-25T15:20:05.091Z",
+  "generatedAt": "2026-09-26T06:19:50.330Z",
   "artifacts": [
     {
       "file": "Dentiva Pro-1.0.0-win-x64-portable.exe",
-      "bytes": 87659768,
-      "sha256": "d3d0fe15f09852dfda1a7e3c53b34d610d21bb245bcc71a07d050735343c318b"
+      "bytes": 87676147,
+      "sha256": "ba47f9b47ebc046b50820ddf23386f8c83fb3fe365e15f8943c96769c2d0ae11"
     },
     {
       "file": "Dentiva Pro-1.0.0-win-x64-setup.exe",
-      "bytes": 87887427,
-      "sha256": "43f970b9e8596bbeb49fdcba84ae4747fbd15707d441b728b2e8d4caf5e86852"
+      "bytes": 87903797,
+      "sha256": "d290b4681abb670bc60743a4d94699b8fecac037ab9c3bcb7456c29a73c4fd48"
     },
     {
       "file": "Dentiva Pro-1.0.0-win-x64-setup.exe.blockmap",
-      "bytes": 93548,
-      "sha256": "59de9756ad409a88fd35931e71d3f8d924e3418b582263d16968a28a01c4a006"
+      "bytes": 93251,
+      "sha256": "ac8d33659a4429715d1db4d08740c8b9aaee7ab68127ac02d63278275b4e5478"
     },
     {
       "file": "Dentiva Pro-1.0.0-win-x64.zip",
-      "bytes": 120043334,
-      "sha256": "58a53fdd625b1b67a4bb7f33222e2d87cbcb212e532d26420dbd07bd68696ba6"
+      "bytes": 120065341,
+      "sha256": "9b7a70692d09c34c62e8c35015e96fc8995b8e11be380e68812366f67cfb691f"
     }
   ]
 }
