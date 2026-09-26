@@ -7,6 +7,7 @@ import { contextBridge, ipcRenderer } from 'electron';
  */
 const CHANNEL_ALLOWLIST = new Set([
   'auth.status', 'auth.login', 'auth.logout', 'auth.lock', 'auth.unlock', 'auth.changePassword',
+  'activation.status', 'activation.activate',
   'setup.complete',
   'clinic.get', 'clinic.update', 'clinic.setLogo', 'clinic.logoDataUrl',
   'settings.get', 'settings.update',

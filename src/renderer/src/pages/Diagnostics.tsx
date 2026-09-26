@@ -11,6 +11,7 @@ export function DiagnosticsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState<{ name: string; version: string; dataDir: string } | null>(null);
+  const [activation, setActivation] = useState<{ activated: boolean; reason: string; installationId: string } | null>(null);
 
   const run = useCallback(async () => {
     setBusy(true); setError('');
@@ -23,6 +24,7 @@ export function DiagnosticsPage() {
   useEffect(() => {
     void run();
     api<{ name: string; version: string; dataDir: string }>('app.info').then(setInfo).catch(() => setInfo(null));
+    api<{ activated: boolean; reason: string; installationId: string }>('activation.status').then(setActivation).catch(() => setActivation(null));
   }, [run]);
 
   return (
@@ -36,6 +38,12 @@ export function DiagnosticsPage() {
         <dl className="kv-list" style={{ marginBottom: 14 }}>
           <dt>Application</dt><dd>{info.name} v{info.version}</dd>
           <dt>Data directory</dt><dd style={{ wordBreak: 'break-all', userSelect: 'text' }}>{info.dataDir}</dd>
+          <dt>Activation</dt>
+          <dd>
+            {activation
+              ? <>{activation.activated ? <>Activated on this computer <Badge tone="success">Active</Badge></> : <>Not activated ({activation.reason})</>} · Installation ID <span className="tabular">{activation.installationId}</span></>
+              : '—'}
+          </dd>
         </dl>
       )}
       {error && <div className="alert-strip danger">{error}</div>}

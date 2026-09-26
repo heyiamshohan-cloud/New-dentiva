@@ -1,97 +1,111 @@
 # Engineering Checkpoint — Dentiva Pro
 
-**Date:** 2026-09-25 (Asia/Dhaka) · **Branch:** `arena/01a0d800-new-dentiva` · **Version targeted:** 1.0.0
+**Date:** 2026-09-26 (Asia/Dhaka) · **Branch:** `arena/01a0dc41-new-dentiva` · **Version targeted:** 1.0.0 (final commercial build)
 
 This file is the always-current resume point. Read it first when continuing work.
 
-## Verified quality gates (all green on this date)
+## Current phase: FINAL CYCLE — complete, frozen candidate
+
+The final forensic/premiumization cycle (directive of 2026-09-26) is **finished in-sandbox**.
+Product is treated as feature-frozen; only defects justify further change.
+
+## Verified quality gates (all green on this date, re-run independently after every fix)
 
 | Gate | Command | Result |
 | --- | --- | --- |
 | Type safety | `npx tsc --noEmit -p tsconfig.json` | 0 errors |
-| Unit/integration tests | `npx vitest run` | 81/81 across 13 suites |
-| Production build | `npx electron-vite build` | clean (main 108 kB, renderer 364 kB JS, 23 kB CSS) |
-| End-to-end clinic day | `npx tsx scripts/smoke.ts` | 13/13 scenarios PASS |
-| Static security audit | `npx tsx scripts/static-audit.ts` | clean (8 gates) |
+| Unit/integration tests | `npx vitest run` | **97/97 across 14 suites** (added tests/activation.test.ts, 16 cases) |
+| Clinic-day E2E + activation | `npx tsx scripts/smoke.ts` | **14/14 scenarios PASS** |
+| Static security audit | `npx tsx scripts/static-audit.ts` | clean (**9 gates**, new: activation confidentiality) |
 | Perf budgets | `npx tsx scripts/perf.ts` | all hot paths within budget |
-| Scale — 10k patients | `npx tsx scripts/scale-test.ts 10000 3` | budgets met (worst 11.3 ms) |
-| Scale — 100k patients | `npx tsx scripts/scale-test.ts 100000 3` | budgets met (worst 39.5 ms, 86 MB db) |
+| Scale 10k | `npx tsx scripts/scale-test.ts 10000 3` | budgets met |
+| Scale 100k + deep history | `npx tsx scripts/scale-test.ts 100000 2` | budgets met; 64 MB db; **3,000-entry lifetime timeline fully reachable, dup-free, 60.5 ms full walk** |
+| Production bundle | `npx electron-vite build` | clean (renderer 368.9 kB JS, 23.7 kB CSS) |
+| Production serial check | out-of-band run against built keyring (2026-09-26) | correct serial accepted (incl. spaced/dashed/lowercase), all guesses + 15-of-16-digit prefix rejected, state file secret-free, lockout honored. **Serial never in repo/logs/artifacts** |
 
-## Architecture snapshot
+## What changed this cycle (defects found → fixed → regression-protected)
 
-- `src/main/` — main process: `context.ts` (AppContext service container), `db/` (migrations, WAL), `services/` (27 services), `documents/` (single document engine: HTML templates → PDF; preview == PDF), `security/` (scrypt passwords, session with inactivity lock), `domain/` (integer-paisa money, dates).
-- `src/main/ipc.ts` — table-driven permission-checked route registry; `src/main/preload.ts` — the ONLY bridge (channel allowlist).
-- `src/renderer/src/` — React 18 app: 20 pages (Dashboard, Patients, Patient360, Appointments, Queue, Treatments, Prescriptions, Invoices, Payments, Accounting, Inventory, Reports, Staff, Audit, Backup, Settings, Diagnostics, Setup wizard, Login, Lock).
-- `src/shared/` — types (money as `Paisa`), permissions matrix, RBAC `roleHas()`.
+1. **P0 §37 gap — no activation system existed.** Added: `src/main/security/activation.ts`
+   (HMAC-digest verify, constant-time compare, machine-bound state file in userData,
+   persisted lockout 5→60s×2ⁿ capped 1 h, atomic state write), `activation.keys.ts`
+   (keyed digest only — serial never in plaintext anywhere), main-process gate in
+   `ipc.ts` dispatch (`ACTIVATION_EXEMPT` = activation.*/app.info only — enforced in
+   main, not by hiding UI), renderer `Activation.tsx` first-run gate + NOT_ACTIVATED
+   global handling, Diagnostics activation line, boot-log status word (no secret
+   material), smoke fixture round-trip, 16 unit tests, static-audit gate 9
+   (no 12+ digit runs outside hex constants in src AND docs; gate-7 regex now also
+   sees ipcMain.handle channels). Production keyring verified out-of-band (table above).
+2. **P0 — PDF export & printing were broken on every document screen.** DocPreview sent
+   `{html,size}` while main demanded `docKind`; main ignored `html` entirely. Fixed both
+   sides: renderer forwards `{docKind, ...payload}`; main ALWAYS rebuilds document HTML
+   server-side (renderer HTML never trusted; also kills an HTML-injection surface).
+3. **P1 — `documents.pdf`/`documents.printDoc` bypassed RBAC/session** (handled before the
+   permission-checked router). Now gated by `docActorFor()` (requireActor +
+   `documents.print`, forbidden-audited).
+4. **P1 — multi-page print clipping:** continuation pages had zero margins (padding-based
+   sheet + margins:0). Now: print media zeroes sheet padding; `@page` margin for system
+   print; printToPDF custom margins (mm→px@96) from shared `PAGE_MARGINS_MM`; multi-page
+   PDFs get a footer "Prescription · Page x of y" (80mm roll exempt). Verified via
+   documents tests + preview-parity invariant.
+5. **P2 — Patient 360 timeline had hidden 1000-per-source caps + silent 500-item ceiling.**
+   Replaced with SQL UNION-ALL merged, fully paginated `visits.timeline(page,pageSize)`
+   (+total). Regression tests: 3000-entry walk dup-free, complete, deterministic; scale
+   test enforces reachability at 100k. UI: "Showing n of total / Load 60 more".
+6. **P2 — prescription directions field was dead** (`customInstructions` always ''):
+   RxBuilderDialog now has a real **Directions** input per medicine (printed under the
+   med line, ahead of Notes).
+7. **P2 — statement header abused the "No:" slot** → labelled "Statement period".
+8. **P3 polish:** dead/fake routes deleted (`ui.toast` fake-success, `win.setTitle`,
+   unreachable win pseudo-routes, dead `documents.assets`); `prefers-reduced-motion` kill
+   switch; dialog/overlay/toast micro-animations (≤160 ms); auth-card activation styles;
+   window `minHeight` 700→640 so the app fits 1280×720 with the Windows taskbar;
+   production menu removed + devtools closed on open (`!isDev`); global
+   `web-contents-created` hardening (every webContents: deny windows/navigation,
+   https handoff only).
 
-## Non-negotiable invariants (covered by tests + smoke + static audit)
+## Non-negotiable invariants (tests + smoke + static audit)
 
 1. Money is integer paisa; floats never touch amounts.
 2. Receipt numbers exist only after a payment row persists; idempotent `clientRef`.
-3. Prescriptions carry zero financial fields; plans never create invoices.
-4. Patient codes are generated once, never reused, never derived from list position.
-5. Backups are zipped with a SHA-256 manifest; restore validates first and refuses corrupt/partial archives; restore is atomic (stage-wipe-verify-commit).
-6. Inventory never goes invalid-negative (`ERR.CONFLICT` on insufficient stock).
-7. Renderer reaches the backend only through the preload allowlist; every channel has a permission-checked handler.
+3. Prescriptions carry zero financial fields (CSS + payload + audit gate); plans never create invoices.
+4. Patient codes generated once, never reused, never from list position.
+5. Backups zipped with SHA-256 manifest; restore stage-verify-commit; corrupt archives refused.
+   **Activation state is intentionally OUTSIDE backups** (machine-bound; restore never clobbers it).
+6. Inventory never goes invalid-negative.
+7. Renderer reaches backend only via preload allowlist; every channel permission-checked.
+8. **No clinic-data channel is reachable before activation** (enforced in main dispatch).
+9. The commercial serial appears in no source, doc, log, bundle or artifact; the static
+   audit gate fails the build if a 12+ digit literal (or doc digit-run) ever appears.
 
 ## Environment notes (this sandbox)
 
-- better-sqlite3 native addon was rebuilt for the host Node ABI with
-  `npm_config_nodedir=/usr/local node-gyp rebuild --release` inside
-  `node_modules/better-sqlite3` after the binding went stale. Re-run that if
-  tests fail with "Could not locate the bindings file". For packaging, run
-  `npm run rebuild:native` (electron-builder install-app-deps) to target the
-  Electron ABI instead; then rebuild for Node again before running vitest.
-- Probed 2026-09-25: `node_modules/electron/dist` is EMPTY (binary download
-  wiped per snapshot), no wine/xvfb, `objects.githubusercontent.com` and
-  npmmirror both TLS-blocked; only registry.npmjs.org + github.com HTML work.
-  Consequence: no local packaging of ANY platform in this sandbox — use CI.
+- `npm ci --ignore-scripts` then rebuild better-sqlite3 for Node ABI:
+  `cd node_modules/better-sqlite3 && npm_config_nodedir=/usr/local npx node-gyp rebuild --release`
+  (plain `npm ci` fails: nodejs.org header download is blocked here).
+- electron binary dist absent / GitHub asset hosts TLS-blocked → no local Windows packaging;
+  CI (windows-latest) owns packaging + clean-boot + NSIS install/uninstall verification.
+  CI now automatically runs the activation suite (vitest) and smoke scenario.
 
-## Release pipeline — END-TO-END VERIFIED 2026-09-25
+## Release pipeline status
 
-CI (`.github/workflows/ci.yml`): every push/PR on ubuntu-latest — npm ci →
-typecheck → 81 tests → smoke → static audit → perf → 10k scale → bundle.
-First live run 36140789652: **green (40 s)**.
+- CI `.github/workflows/ci.yml` (ubuntu): npm ci → typecheck → 97 tests → smoke → static audit →
+  perf → 10k scale → bundle. (Previously green; must re-confirm on this branch's push.)
+- Release `.github/workflows/release.yml`: tag-triggered full matrix incl. windows-latest
+  packaging, clean-boot (portable + NSIS silent install/uninstall), SHA256SUMS, manifest to
+  `ci-logs`. Last rehearsal on prior commit chain: run 36151570959 green.
+- Release procedure: merge this branch → `git tag -a v1.0.0` → push → workflow builds+publishes.
+  **The activation gate must be reflected in the clean-machine protocol — see docs/RELEASE.md §5.**
 
-Release (`.github/workflows/release.yml`): tag-triggered (final tags publish;
-pre-release tags like `v1.0.0-rc1` and manual dispatch build + verify without
-publishing). Rehearsal campaign on tag `v1.0.0-rc1` (9 iterations, run ids
-36141258362 … 36146099881) found and fixed, in order:
-1. Windows EBUSY in tests (DB open during temp rm) → close-then-rm + retries
-   (tests/perf.test.ts, tests/race.test.ts, helpers/schema/backup rm flags).
-2. `build/icon.ico` referenced but never committed → deterministic
-   `scripts/build-icon.mjs` (@resvg/resvg-js → png-to-ico, 6 frames) + `npm run icon`.
-3. `electron-builder.yml`: unknown top-level key `zip:` removed (fails schema
-   validation).
-4. Same file: `${target}` macro removed from win-level `artifactName`
-   (undefined macro error after pack/sign-skip stage).
-5. Same file: `npmRebuild: false` (CI already runs install-app-deps; avoids
-   node-gyp cross-compile refusal) and explicit `files:` allowlist dropped so
-   production deps externalized by electron-vite (better-sqlite3/archiver/
-   extract-zip/zod) actually ship.
-6. Clean-boot step: GUI-subsystem processes reject std-handle redirection —
-   polling loop now watches PID + userData (≤90 s) instead.
-**FINAL verified rehearsal: run 36151570959 (v1.0.0-rc1 @ 234c4a7, all 10
-applicable steps green).** Two further real defects were found & fixed after
-an earlier note incorrectly claimed green: (a) boot diagnostics/step-order +
-GUI redirect assumptions; (b) packaged app crashed at first boot with
-"Cannot find module 'archiver-utils'" (screenshot-evidenced, run 36150749531)
-→ pure-JS deps now inlined into the main bundle. Full corrected evidence
-table: docs/FINAL_RELEASE_REPORT.md §5. Artifacts + SHA-256 manifest:
-`ci-logs/manifests/v1.0.0-rc1/`. Diagnostics flow: on failure the workflow
-pushes logs/screenshots to branch `ci-logs`; on success the manifest.
+## Remaining known issues (live list — nothing else is knowingly deferred)
 
-Release procedure now: PR arena branch → main (merge) →
-`git tag -a v1.0.0 -m "Dentiva Pro 1.0.0" <merge-sha> && git push origin v1.0.0`
-→ release.yml runs the whole pipeline and PUBLISHES the GitHub Release
-(final tag has no `-` suffix).
+| # | Item | Severity | Status |
+| --- | --- | --- | --- |
+| 1 | Code signing certificate | P2 (commercial) | Open by decision — unsigned builds warn in SmartScreen; CI skips signing by design |
+| 2 | Physical-machine install pass | P2 | Recommended; CI clean-boot+install/uninstall is automated per release run |
+| 3 | Serial PDF visual eyeball on Windows printer drivers | P3 | Print paths unit-verified; geometry shared between preview/PDF/print; no physical printer in sandbox |
 
-## Release blockers (live list)
+## Next exact action
 
-| # | Blocker | Status |
-| --- | --- | --- |
-| 1 | Windows artifacts built from the release commit | **CLOSED (mechanism)** — produced & verified in CI run 36146099881 (`v1.0.0-rc1` rehearsed, not published); first final tag produces the shippable set |
-| 2 | Clean-machine install/run verification | **CLOSED (CI level)** — portable boot + NSIS silent install/uninstall verified on a fresh windows-latest runner each run; optional physical-machine pass per `docs/RELEASE.md` §5 remains recommended |
-| 3 | Signed executables (code-signing cert) | Open — commercial decision |
-
-No code-level blockers remain.
+Push `arena/01a0dc41-new-dentiva` → open PR → CI green → merge → tag `v1.0.0` → release.yml
+produces + verifies final artifacts (this branch's commit) → paste run link + hashes into
+docs/FINAL_RELEASE_REPORT.md §7 → ship.

@@ -784,22 +784,49 @@ function AttachmentsTab({ pid, canEdit }: { pid: number; canEdit: boolean }) {
 
 /* ----------------------------------------------------------------- timeline */
 function TimelineTab({ pid }: { pid: number }) {
-  const [items, setItems] = useState<Array<{ at: string; kind: string; refId: number; title: string; detail: string }>>([]);
+  type Entry = { at: string; kind: string; refId: number; title: string; detail: string };
+  const [items, setItems] = useState<Entry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
   useEffect(() => {
-    api<typeof items>('patients.timeline', { patientId: pid }).then(setItems).catch((e) => toast.error(String(e)));
+    setItems([]); setPage(1); setTotal(0);
   }, [pid]);
-  if (!items.length) return <Empty icon={<IconVisit size={34} />} title="No history yet" hint="The clinical timeline builds itself chronologically from visits, prescriptions and appointments." />;
+  useEffect(() => {
+    setLoading(true);
+    api<{ rows: Entry[]; total: number }>('patients.timeline', { patientId: pid, page })
+      .then((p) => {
+        setTotal(p.total);
+        setItems((cur) => (page === 1 ? p.rows : [...cur, ...p.rows]));
+      })
+      .catch((e) => toast.error(String(e)))
+      .finally(() => setLoading(false));
+  }, [pid, page]);
+  if (!loading && !items.length) return <Empty icon={<IconVisit size={34} />} title="No history yet" hint="The clinical timeline builds itself chronologically from visits, prescriptions and appointments." />;
+  const remaining = Math.max(0, total - items.length);
   return (
     <div className="card"><div className="card-body">
       <div className="timeline">
-        {items.map((e, i) => (
-          <div key={i} className="tl-item">
+        {items.map((e) => (
+          <div key={`${e.kind}:${e.refId}`} className="tl-item">
             <div className="when">{fmtDateTime(e.at)}</div>
             <div className="what">{e.title}</div>
             {e.detail && <div className="detail">{e.detail}</div>}
           </div>
         ))}
       </div>
+      {(remaining > 0 || loading) && (
+        <div className="row-end" style={{ marginTop: 10 }}>
+          <span className="muted" style={{ marginRight: 'auto', fontSize: 'var(--fs-11)' }}>
+            {total > 0 ? `Showing ${items.length} of ${total} lifetime entries` : ''}
+          </span>
+          {remaining > 0 && (
+            <Button size="sm" loading={loading} onClick={() => setPage((p) => p + 1)}>
+              Load {Math.min(60, remaining)} more
+            </Button>
+          )}
+        </div>
+      )}
     </div></div>
   );
 }

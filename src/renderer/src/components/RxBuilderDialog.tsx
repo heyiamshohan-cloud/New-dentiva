@@ -7,10 +7,10 @@ import type { PatientSummary } from '@shared/types';
 
 interface MedRow {
   medicineName: string; form: string; customForm: string; dose: string; frequency: string;
-  duration: string; timing: string; customTiming: string; notes: string;
+  duration: string; timing: string; customTiming: string; instructions: string; notes: string;
 }
 
-const emptyMed = (): MedRow => ({ medicineName: '', form: 'tablet', customForm: '', dose: '', frequency: '', duration: '', timing: 'after food', customTiming: '', notes: '' });
+const emptyMed = (): MedRow => ({ medicineName: '', form: 'tablet', customForm: '', dose: '', frequency: '', duration: '', timing: 'after food', customTiming: '', instructions: '', notes: '' });
 
 /** Flagship clinical prescription builder. Strictly clinical — no money. */
 export function RxBuilderDialog(props: {
@@ -61,7 +61,7 @@ export function RxBuilderDialog(props: {
             form: m.form === 'custom' ? (m.customForm.trim() || 'custom') : m.form,
             dose: m.dose.trim(), frequency: m.frequency.trim(), duration: m.duration.trim(),
             timing: m.timing === 'custom' ? m.customTiming.trim() : m.timing,
-            customInstructions: '', notes: m.notes.trim()
+            customInstructions: m.instructions.trim(), notes: m.notes.trim()
           }))
         }
       });
@@ -143,7 +143,8 @@ export function RxBuilderDialog(props: {
                 </Select>
               </Field>
               {m.timing === 'custom' && <Field label="Custom timing" width={3}><Input value={m.customTiming} onChange={(e) => setMed(i, { customTiming: e.target.value })} /></Field>}
-              <Field label="Medicine notes" width={12}><Input value={m.notes} onChange={(e) => setMed(i, { notes: e.target.value })} placeholder="Instructions specific to this medicine" /></Field>
+              <Field label="Directions" width={6}><Input value={m.instructions} onChange={(e) => setMed(i, { instructions: e.target.value })} placeholder="e.g. Swallow whole, do not chew" /></Field>
+              <Field label="Medicine notes" width={6}><Input value={m.notes} onChange={(e) => setMed(i, { notes: e.target.value })} placeholder="Internal reminder for this medicine" /></Field>
             </div>
           </div>
         ))}

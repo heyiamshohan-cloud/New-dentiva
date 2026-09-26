@@ -15,8 +15,8 @@ Run every quality gate and record the output in `docs/FINAL_RELEASE_REPORT.md`:
 ```powershell
 npm ci
 npm run typecheck          # 0 errors
-npm test                   # 81/81 passing
-npm run smoke              # 13/13 scenarios
+npm test                   # 97/97 passing
+npm run smoke              # 14/14 scenarios (incl. activation round-trip)
 npm run audit:static       # clean
 npm run perf               # within budget
 npm run scale 100000 3     # within budget
@@ -68,9 +68,18 @@ gh release create v1.0.0 .\release\* --title "Dentiva Pro 1.0.0" --notes-file do
 On a Windows 10/11 x64 machine that has never had Dentiva installed:
 
 1. Copy artifacts; verify `SHA256SUMS.txt` matches.
-2. Install via Setup.exe → app launches to the first-launch Setup wizard (empty database, no sample data).
+2. Install via Setup.exe → app launches to the **activation gate** (empty database, no sample data).
+   2a. Enter the production activation serial (delivered out of band — it is not in the repo,
+       docs or logs). Verify: wrong serial refused with the constant message; empty/whitespace
+       refused; 5 wrong guesses engage a timed lockout that survives an app restart; the valid
+       serial activates; after restart the app comes up already activated (no re-prompt);
+       copy `activation-state.json` from userData to another machine → treated as
+       machine-mismatch and re-entry is required. Then first-launch Setup wizard follows.
 3. Create the administrator account and one patient; add a visit, invoice, payment; print a receipt (A4 and 80 mm).
 4. Create a backup; uninstall (keep data); reinstall; restore; verify all records and the audit log.
+   Activation state lives in userData and survives a keep-data reinstall by design (no re-entry);
+   a clean wipe of userData requires activation again. Backups contain clinic data only — never
+   the activation state or any serial material.
 5. Uninstall again; confirm removal artefacts (uninstall entry, shortcuts) gone while user data survives by design.
 
 Record pass/fail against each step in `docs/FINAL_RELEASE_REPORT.md`.

@@ -36,12 +36,21 @@ function baseCss(size: PaperSize, opts: { financial?: boolean } = {}): string {
     .totals { margin-left: auto; width: ${narrow ? '100%' : '260px'}; margin-top: 6px; }
     .totals td { border: none; padding: 2.5px 6px; }
     .totals .grand td { border-top: 1.5px solid #0e5f8a; font-weight: 700; font-size: ${narrow ? '11px' : '12.5px'}; }
+    .totals { break-inside: avoid; }
     .badge.paid { color: #157347; border-color: #157347; }
     .badge.due { color: #b02a37; border-color: #b02a37; }
     .badge.partial { color: #9a6a00; border-color: #9a6a00; }`
     : '';
   return `
-    @page { size: ${p.width}mm ${p.height}mm; margin: 0; }
+    @media print {
+      /* On paper, page margins come from @page (system print) or the print
+         engine's margin option (PDF export) — never from the sheet padding,
+         which would only decorate the first page. Continuation pages then
+         have correct, uniform margins. */
+      .sheet { margin: 0; padding: 0; width: auto; min-height: 0; }
+      table, .med { break-inside: avoid; }
+    }
+    @page { size: ${p.width}mm ${p.height}mm; margin: ${narrow ? '5mm 4mm' : '14mm 16mm'}; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { margin: 0; padding: 0; }
     body {
@@ -87,7 +96,6 @@ function baseCss(size: PaperSize, opts: { financial?: boolean } = {}): string {
     .center { text-align: center; }
     .muted { color: #6b7885; }
     .bold { font-weight: 700; }
-    @media print { .sheet { margin: 0; } }
     ${financialCss}
   `;
 }
@@ -96,7 +104,7 @@ function docShell(size: PaperSize, title: string, body: string, opts: { financia
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>${baseCss(size, opts)}</style></head><body><div class="sheet">${body}</div></body></html>`;
 }
 
-function header(clinic: ClinicProfile, docTitle: string, number: string, dateIso: string, logoDataUrl: string | null): string {
+function header(clinic: ClinicProfile, docTitle: string, number: string, dateIso: string, logoDataUrl: string | null, numberLabel = 'No'): string {
   return `
   <div class="doc-header">
     <div class="brand">
@@ -112,7 +120,7 @@ function header(clinic: ClinicProfile, docTitle: string, number: string, dateIso
     </div>
     <div class="doc-title">
       <h2>${esc(docTitle)}</h2>
-      <div class="num">No: ${esc(number)}</div>
+      <div class="num">${esc(numberLabel)}: ${esc(number)}</div>
       <div class="num">Date: ${esc(dateIso.slice(0, 10))}</div>
     </div>
   </div>`;
@@ -294,7 +302,7 @@ export function buildStatementHtml(input: StatementDocInput, size: PaperSize = '
     })
     .join('');
   const body = `
-    ${header(clinic, 'Patient Statement', `${input.from} → ${input.to}`, new Date().toISOString(), logoDataUrl)}
+    ${header(clinic, 'Patient Statement', `${input.from} → ${input.to}`, new Date().toISOString(), logoDataUrl, 'Statement period')}
     <div class="patient-strip">
       <span class="cell"><span class="lbl">Patient</span><span class="val">${esc(input.patientName)}</span></span>
       <span class="cell"><span class="lbl">Patient Code</span><span class="val">${esc(input.patientCode)}</span></span>
@@ -315,3 +323,13 @@ export function buildStatementHtml(input: StatementDocInput, size: PaperSize = '
 }
 
 export const PAPER_DIMENSIONS = PAPER_MM;
+
+/** Sheet padding == the page margins the print engines must reproduce on
+ *  EVERY page (PDF export uses these via printToPDF margins; system printing
+ *  via @page). Kept in one place so preview, PDF and paper agree. */
+export const PAGE_MARGINS_MM: Record<PaperSize, { top: number; bottom: number; left: number; right: number }> = {
+  A4: { top: 14, bottom: 14, left: 16, right: 16 },
+  A5: { top: 14, bottom: 14, left: 16, right: 16 },
+  Letter: { top: 14, bottom: 14, left: 16, right: 16 },
+  '80mm': { top: 5, bottom: 5, left: 4, right: 4 }
+};

@@ -1,8 +1,10 @@
 # Final Release Report — Dentiva Pro 1.0.0
 
-**Report date:** 2026-09-25 (Asia/Dhaka)
-**Branch / commit target:** `arena/01a0d800-new-dentiva`
-**Assessment:** **Alpha-candidate (unsigned), blocked on Windows packaging host** — all engineering gates pass; distribution artifacts must still be rebuilt from this commit on a network-enabled Windows/Wine host, then clean-machine verified (see Blockers).
+**Report date:** 2026-09-26 (Asia/Dhaka) — final forensic/premiumization cycle appended as §7
+**Branch / commit target:** `arena/01a0dc41-new-dentiva`
+**Assessment:** **Final commercial candidate (unsigned).** All engineering gates green on the
+current commit, including the new activation system; distribution artifacts are produced and
+verified by the tag-triggered release pipeline on windows-latest.
 
 ---
 
@@ -11,9 +13,9 @@
 | Check | Command | Outcome (2026-09-25) |
 | --- | --- | --- |
 | Static types | `npx tsc --noEmit -p tsconfig.json` | 0 errors |
-| Test suite | `npx vitest run` | 81/81 (13 files): auth, backup, billing, clinical, dataTransfer, documents, financial, inventory, money, patients, perf, race, schema |
-| Clinic-day E2E | `npx tsx scripts/smoke.ts` | 13/13 PASS — setup→login→RBAC→patients→appointment conflict→visit/chart→plan (no auto-invoice)→prescription (financial-free)→invoice→issue→idempotent payment/receipt→statement→inventory negative-stock refusal→attachment byte-integrity→backup→wipe→restore→audit anchor |
-| Source security audit | `npx tsx scripts/static-audit.ts` | CLEAN — 8 gates: no network calls, no embedded secrets, no placeholders, no float money parsing, parameterized SQL only (with proven-safe constant fragments), renderer↔main via allowlisted bridge only, IPC route parity, Electron hardening flags present |
+| Test suite | `npx vitest run` | 97/97 (14 files): auth, activation, backup, billing, clinical, dataTransfer, documents, financial, inventory, money, patients, perf, race, schema |
+| Clinic-day E2E | `npx tsx scripts/smoke.ts` | 14/14 PASS — setup→login→RBAC→patients→appointment conflict→visit/chart→plan (no auto-invoice)→prescription (financial-free)→invoice→issue→idempotent payment/receipt→statement→inventory negative-stock refusal→attachment byte-integrity→backup→wipe→restore→audit anchor |
+| Source security audit | `npx tsx scripts/static-audit.ts` | CLEAN — 9 gates (+activation confidentiality): no network calls, no embedded secrets, no placeholders, no float money parsing, parameterized SQL only (with proven-safe constant fragments), renderer↔main via allowlisted bridge only, IPC route parity, Electron hardening flags present |
 | Latency budgets | `npx tsx scripts/perf.ts` | all hot paths ≤ budget (worst 5.3 ms on 2k-patient dataset) |
 | Scale 10k | `npx tsx scripts/scale-test.ts 10000 3` | budgets met; worst path 11.3 ms |
 | Scale 100k | `npx tsx scripts/scale-test.ts 100000 3` | budgets met; worst path 39.5 ms (typeahead); financial rollup exact over 200-invoice long-history patient; db 86 MB |
@@ -101,3 +103,86 @@ hash on the runner itself.
 Version `1.0.0` may be tagged once #3's signing decision is taken (or
 explicitly waived as "unsigned alpha"): the tag push itself performs the
 final build + verification + publication.
+
+
+---
+
+## 7. FINAL CYCLE (2026-09-26) — forensic audit, activation, premiumization
+
+Independent re-verification (nothing taken on trust): typecheck 0 errors; 97/97 tests;
+smoke 14/14; static audit 9/9 gates; perf within budget; scale 10k and 100k within
+budget; production bundle clean; artifact scan: renderer contains no keyring/secret
+surface, main carries better-sqlite3 external + all pure-JS deps inlined.
+
+### 7.1 Defects found this cycle, fixed, regression-protected
+
+| ID | Severity | Defect (independently discovered) | Fix | Proof |
+| --- | --- | --- | --- | --- |
+| F-1 | P0 | Product required commercial serial activation — none existed | Full activation subsystem (§ docs/ENGINEERING_CHECKPOINT.md cycle notes): keyed-HMAC verification, constant-time compare, machine-bound persisted state, lockout, main-process channel seal, first-run UI, support Installation ID | 16 activation tests; smoke stage; static-audit gate 9; out-of-band production keyring verification below |
+| F-2 | P0 | PDF export **and** print were broken on every document screen (channel contract mismatch: renderer sent `html`, main required `docKind`) | Renderer forwards `docKind`+ids; main rebuilds HTML server-side (never trusts renderer HTML) | documents suite + audit parity gate; manual flow trace |
+| F-3 | P1 | `documents.pdf`/`documents.printDoc` skipped session+RBAC checks (intercepted before permission router) | `docActorFor`: requireActor + `documents.print`, forbidden-audited | ipc code review + parity/static gates |
+| F-4 | P1 | Multi-page documents printed with zero continuation-page margins (clipping); no page numbering | Shared `PAGE_MARGINS_MM`; print-media CSS; printToPDF custom margins; footer "DocType · Page x of y" on multi-page docs (not 80mm) | templates/pdf code; documents tests pass (incl. new print-CSS parity: clinical doc guard rejects the first attempt that leaked a financial selector — test did its job) |
+| F-5 | P2 | Patient 360 timeline silently capped sources at 1000 rows and display at 500 — long histories were unreachable | Merged UNION-ALL paginated timeline with totals; UI "Showing n of total / Load more" | clinical.test 3000-page walk dup-free/deterministic + scale-test deep-history assertion at 100k (all 3,000 entries reachable, 60.5 ms) |
+| F-6 | P2 | Prescription medicine "Directions" field existed in schema/printing but could never be entered (always '') | Real per-medicine Directions input in RxBuilder | builder wired; documents tests |
+| F-7 | P2 | Statement PDF used the "No:" slot for a date range | Header number-label support; now "Statement period" | templates |
+| F-8 | P3 | Dead/fake surfaces: `ui.toast` fake-success route, `win.setTitle`, unreachable win pseudo-routes, `documents.assets` | Removed | static audit clean |
+| F-9 | P3 | Window min height 700 > usable 720p desktop height | minHeight 640 | code |
+| F-10 | P3 | Production build exposed Electron default menu/devtools path | `Menu.setApplicationMenu(null)` + devtools auto-close when packaged; global webContents hardening for every window (deny new windows/navigation) | code + hardening gate |
+| F-11 | P3 | No reduced-motion support; no dialog/toast entry motion | `prefers-reduced-motion` global kill; 120–160 ms pop/fade/toast motion | CSS |
+
+### 7.2 Activation security review (spec §37 compliance)
+
+- Serial is stored **nowhere**: only `HMAC-SHA256(key, "dentiva.pro.activation.v1|" + normalized)`
+  is embedded. Keyed digest is one-way; verification constant-time; every wrong input
+  yields the identical message (no prefix/length oracle — 15-of-16 prefix explicitly rejected).
+- Out of renderer: renderer receives only `{activated, reason, installationId, lockedUntil}`.
+  The key material never enters the renderer bundle (verified by scanning `out/`).
+- State: userData/`activation-state.json`, mode 0600, atomic write, machine-bound
+  (HMAC over machine-id+MAC+hostname+arch); copied/tampered/corrupt/missing files all
+  degrade to not-activated with precise recovery copy — never activated. Reinstall on the
+  same machine with kept userData remains activated; wiped userData requires re-entry.
+- Lockout: 5 consecutive failures → 60 s × 2ⁿ (cap 1 h) **persisted**, survives restart;
+  success resets budget; correct serial is refused during lockout (prevents oracle timing).
+- Bypass resistance: gate is main-process dispatch — patching renderer/localStorage/UI
+  cannot open business channels; forging activation requires computing a valid state
+  token for a foreign machine fingerprint (keyed HMAC in the bundle — the accepted bar
+  for offline activation; documented honestly: offline activation is deterrence, not DRM).
+- No online dependency. No serial material in logs (boot log emits status words only),
+  diagnostics, audit metadata (audit stores `activation.completed|rejected` + error code),
+  docs, or artifacts (static-audit scans src **and** docs for 12+ digit runs outside hex).
+- Production verification (2026-09-26, out-of-band in the build environment, script deleted
+  after use, serial never written to any file): correct serial + case/space/dash variants
+  accepted; 5 guesses + prefix rejected; persist/reopen OK; state file free of serial
+  material; lockout honored. Result: **11/11 checks OK**.
+
+### 7.3 Unlimited-record architecture (spec §8/§9) re-verified
+
+Final static scan found **no** business-level ceilings left: former 1000-row timeline caps
+removed (F-5); `search.global` bounds are response-size by design with `truncatedKinds`
+surfaced; list endpoints are paged with truthful `total`; the only fixed bounds are
+response-shaping (pageSize ≤ 500) and system bounds (SQLite/storage). Deep-history proof:
+3,000-event patient inside a 100,000-patient db — every entry reachable via pages,
+duplicate-free, oldest entry present, whole walk 60 ms. Wording for materials: "Dentiva
+Pro imposes no artificial application-level limit on patient or record counts; practical
+capacity depends on storage, RAM, CPU and filesystem/database characteristics."
+
+### 7.4 Final-cycle gate summary
+
+| Gate | Result |
+| --- | --- |
+| Typecheck | 0 errors |
+| Tests | 97/97 (14 suites) — all new fixes regression-covered |
+| Smoke | 14/14 (adds activation stage) |
+| Static audit | clean, 9 gates |
+| Perf | all budgets met |
+| Scale 10k / 100k | all budgets met; deep-history reachability enforced |
+| electron-vite build | clean; bundle hygiene scanned (no secret surface in renderer output) |
+| CI packaging (prior mechanism) | unchanged by this cycle; Windows artifacts, clean-boot, NSIS install/uninstall, SHA256SUMS — re-run per release tag on windows-latest |
+
+### 7.5 Honest remaining-issues list (zero known release-blockers)
+
+1. Code signing — commercial decision outstanding (SmartScreen warning persists).
+2. Physical clean-machine pass — recommended; CI reproduces boot+install+uninstall each release.
+3. Offline activation is deterrence-grade by construction (any offline scheme is patchable
+   by a determined attacker with the bundle); the practical requirement — no plaintext
+   secret, no trivial bypass, clear recovery path — is fully met and documented.

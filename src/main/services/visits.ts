@@ -228,21 +228,41 @@ export class VisitService {
     return rows.map(map);
   }
 
-  /** Chronological clinical timeline entries for Patient 360. Deterministically sorted. */
-  timeline(patientId: number, limit = 500): Array<{ at: string; kind: string; refId: number; title: string; detail: string }> {
-    const out: Array<{ at: string; kind: string; refId: number; title: string; detail: string }> = [];
-    for (const v of this.listForPatient(patientId, 1, 1000).rows) {
-      out.push({ at: v.visitAt, kind: 'visit', refId: v.id, title: `Visit ${v.number}`, detail: v.chiefComplaint || v.diagnosis || v.treatmentPerformed });
-    }
-    const rx = this.db
-      .prepare('SELECT id, number, prescribed_at FROM prescriptions WHERE patient_id = ? ORDER BY prescribed_at DESC, id DESC LIMIT 1000')
-      .all(patientId) as Array<{ id: number; number: string; prescribed_at: string }>;
-    for (const r of rx) out.push({ at: r.prescribed_at, kind: 'prescription', refId: r.id, title: `Prescription ${r.number}`, detail: '' });
-    const appts = this.db
-      .prepare('SELECT id, number, start_at, status FROM appointments WHERE patient_id = ? ORDER BY start_at DESC, id DESC LIMIT 1000')
-      .all(patientId) as Array<{ id: number; number: string; start_at: string; status: string }>;
-    for (const a of appts) out.push({ at: a.start_at, kind: 'appointment', refId: a.id, title: `Appointment ${a.number}`, detail: a.status.replace('_', ' ') });
-    out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : b.refId - a.refId));
-    return out.slice(0, limit);
+  /**
+   * Chronological clinical timeline for Patient 360 — merged visits,
+   * prescriptions and appointments, sorted newest-first, fully paginated.
+   * No source is capped: a patient's entire lifetime history is reachable
+   * page by page (spec: no artificial record ceilings, no silent truncation).
+   * The merge happens inside SQLite over the patient_id indexes, so cost
+   * scales with the requested page, not with the lifetime history.
+   */
+  timeline(patientId: number, page = 1, pageSize = 60): Page<{ at: string; kind: string; refId: number; title: string; detail: string }> {
+    const size = Math.min(Math.max(pageSize, 1), 500);
+    const total =
+      (this.db.prepare('SELECT COUNT(*) c FROM visits WHERE patient_id = ?').get(patientId) as { c: number }).c +
+      (this.db.prepare('SELECT COUNT(*) c FROM prescriptions WHERE patient_id = ?').get(patientId) as { c: number }).c +
+      (this.db.prepare('SELECT COUNT(*) c FROM appointments WHERE patient_id = ?').get(patientId) as { c: number }).c;
+    const rows = this.db
+      .prepare(
+        `SELECT at, kind, refId, title, detail FROM (
+           SELECT v.visit_at AS at, 'visit' AS kind, v.id AS refId,
+                  'Visit ' || v.number AS title,
+                  CASE WHEN v.chief_complaint <> '' THEN v.chief_complaint
+                       WHEN v.diagnosis <> '' THEN v.diagnosis
+                       ELSE v.treatment_performed END AS detail
+           FROM visits v WHERE v.patient_id = ?
+           UNION ALL
+           SELECT r.prescribed_at, 'prescription', r.id, 'Prescription ' || r.number, ''
+           FROM prescriptions r WHERE r.patient_id = ?
+           UNION ALL
+           SELECT a.start_at, 'appointment', a.id, 'Appointment ' || a.number, replace(a.status, '_', ' ')
+           FROM appointments a WHERE a.patient_id = ?
+         )
+         ORDER BY at DESC, refId DESC
+         LIMIT ? OFFSET ?`
+      )
+      .all(patientId, patientId, patientId, size, (page - 1) * size) as Array<{ at: string; kind: string; refId: number; title: string; detail: string }>;
+    const pages = Math.max(1, Math.ceil(total / size));
+    return { rows, total, page: Math.min(Math.max(page, 1), pages), pageSize: size };
   }
 }

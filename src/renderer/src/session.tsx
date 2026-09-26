@@ -12,7 +12,7 @@ export interface SessionUser {
 }
 
 interface SessionState {
-  status: 'booting' | 'setup' | 'signedOut' | 'signedIn';
+  status: 'booting' | 'activating' | 'setup' | 'signedOut' | 'signedIn';
   user: SessionUser | null;
   locked: boolean;
   setupComplete: boolean;
@@ -41,6 +41,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   const refreshStatus = useCallback(async () => {
     try {
+      // Activation is the outermost gate: nothing else is reachable until
+      // this machine holds a valid activation (also enforced in main).
+      const act = await api<{ activated: boolean }>('activation.status');
+      if (!act.activated) {
+        setStatus('activating');
+        return;
+      }
       const st = await api<{ signedIn: boolean; locked: boolean; setupComplete: boolean; clinicName: string; userCount: number; session: SessionUser | null }>('auth.status', { token: undefined });
       setSetupComplete(st.setupComplete);
       setClinicName(st.clinicName);
@@ -102,16 +109,18 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     };
   }, [status, locked, lock]);
 
-  // Any SESSION_LOCKED response hard-locks the UI.
+  // Any SESSION_LOCKED response hard-locks the UI; NOT_ACTIVATED returns the
+  // app to the activation gate (main process is the source of truth).
   useEffect(() => {
     const handler = (e: PromiseRejectionEvent) => {
-      if (e.reason instanceof ApiError && (e.reason.code === 'SESSION_LOCKED' || e.reason.code === 'UNAUTHENTICATED')) {
+      if (e.reason instanceof ApiError && (e.reason.code === 'SESSION_LOCKED' || e.reason.code === 'UNAUTHENTICATED' || e.reason.code === 'NOT_ACTIVATED')) {
         if (e.reason.code === 'SESSION_LOCKED') setLocked(true);
+        if (e.reason.code === 'NOT_ACTIVATED') void refreshStatus();
       }
     };
     window.addEventListener('unhandledrejection', handler);
     return () => window.removeEventListener('unhandledrejection', handler);
-  }, []);
+  }, [refreshStatus]);
 
   const can = useCallback((perm: Permission) => (user ? roleHas(user.role, perm) : false), [user]);
 

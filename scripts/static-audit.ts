@@ -97,7 +97,7 @@ const preloadSrc = fs.readFileSync(path.join(SRC, 'main', 'preload.ts'), 'utf8')
 const ipcSrc = fs.readFileSync(path.join(SRC, 'main', 'ipc.ts'), 'utf8');
 const allow = new Set([...preloadSrc.matchAll(/'([a-z][a-z0-9]*\.[a-zA-Z0-9.]+)'/g)].map((m) => m[1]).filter((c) => c.includes('.')));
 const routed = new Set([...ipcSrc.matchAll(/'([a-z][a-z0-9]*\.[a-zA-Z0-9.]+)'\s*:/g)].map((m) => m[1]));
-const direct = new Set([...ipcSrc.matchAll(/channel === '([a-z][a-z0-9]*\.[a-zA-Z0-9.]+)'/g)].map((m) => m[1]));
+const direct = new Set([...ipcSrc.matchAll(/(?:channel ===|ipcMain\.handle\()\s*'([a-z][a-z0-9]*\.[a-zA-Z0-9.]+)'/g)].map((m) => m[1]));
 for (const ch of allow) {
   if (!routed.has(ch) && !direct.has(ch) && ch.split('.').length === 2) {
     findings.push({ gate: 'ipc parity: channel routed', file: 'src/main/preload.ts', line: 1, snippet: `allowlisted "${ch}" has no main handler` });
@@ -109,6 +109,38 @@ const indexSrc = fs.readFileSync(path.join(SRC, 'main', 'index.ts'), 'utf8');
 for (const invariant of ['contextIsolation: true', 'nodeIntegration: false']) {
   if (!indexSrc.includes(invariant)) {
     findings.push({ gate: 'electron hardening', file: 'src/main/index.ts', line: 1, snippet: `missing invariant "${invariant}"` });
+  }
+}
+
+// ── gate 9: activation confidentiality (commercial secret hygiene) ─────────
+// The purchased production serial must never appear in source, docs, logs or
+// UI copy. Serial material is 12–32 alphanumeric chars; a committed plaintext
+// secret would therefore show up as a long digit/letter run outside quoted hex
+// key material. We also require: (a) the activation gate exists in main and
+// covers every non-exempt channel; (b) nothing logs serial input.
+const HEX_LITERAL = /"\s*[0-9a-f]{32,}\s*"/g;
+for (const [file, lines] of filesText) {
+  const r = rel(file);
+  const joined = lines.join('\n').replace(HEX_LITERAL, '""');
+  if (/\b\d{12,}\b/.test(joined)) {
+    const m = joined.match(/\b\d{12,}\b/)!;
+    const line = joined.slice(0, m.index).split('\n').length;
+    add('activation: no serial material in source', file, line, `long digit run near line ${line}`);
+  }
+  for (const ln of lines) {
+    if (/activate\(|activation/.test(ln) && /console\.(log|error|warn)\([^)]*serial/i.test(ln)) {
+      add('activation: never log the serial', file, 1, ln);
+    }
+  }
+}
+if (!ipcSrc.includes('ACTIVATION_EXEMPT') || !ipcSrc.includes('ctx.activation.isActivated()')) {
+  findings.push({ gate: 'activation: main-process gate', file: 'src/main/ipc.ts', line: 1, snippet: 'activation gate missing from IPC dispatch' });
+}
+for (const doc of ['README.md', 'docs/RELEASE.md', 'docs/FINAL_RELEASE_REPORT.md', 'docs/ENGINEERING_CHECKPOINT.md', 'docs/RELEASE_NOTES.md']) {
+  const p2 = path.join(process.cwd(), doc);
+  if (fs.existsSync(p2)) {
+    const t = fs.readFileSync(p2, 'utf8');
+    if (/\b\d{12,}\b/.test(t)) findings.push({ gate: 'activation: no serial material in source', file: doc, line: 1, snippet: 'long digit run in documentation' });
   }
 }
 
