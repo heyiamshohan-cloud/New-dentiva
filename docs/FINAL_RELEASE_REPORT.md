@@ -186,3 +186,33 @@ capacity depends on storage, RAM, CPU and filesystem/database characteristics."
 3. Offline activation is deterrence-grade by construction (any offline scheme is patchable
    by a determined attacker with the bundle); the practical requirement — no plaintext
    secret, no trivial bypass, clear recovery path — is fully met and documented.
+
+### 7.6 Final artifacts — definitive v1.0.0 release (PUBLISHED 2026-09-26T06:20:49Z)
+
+Release `v1.0.0` @ merge commit `e2970b1` (this cycle). Pipeline run **36223276395**
+(ubuntu-quality job + windows-release job) — **every step green**: quality gates →
+bundle → Electron-ABI rebuild → packaging → SHA256SUMS generation + in-job
+re-verification → **clean-boot** (packaged portable exe first run reaches
+"context ready" with the activation gate live — the shipped app starts at the
+activation screen) → **NSIS silent install + uninstall round-trip** → artifact upload →
+**GitHub Release published** → manifest to `ci-logs`.
+
+| File | Bytes | SHA-256 |
+| --- | --- | --- |
+| Dentiva Pro-1.0.0-win-x64-setup.exe | 87,903,797 | d290b4681abb670bc60743a4d94699b8fecac037ab9c3bcb7456c29a73c4fd48 |
+| Dentiva Pro-1.0.0-win-x64-portable.exe | 87,676,147 | ba47f9b47ebc046b50820ddf23386f8c83fb3fe365e15f8943c96769c2d0ae11 |
+| Dentiva Pro-1.0.0-win-x64.zip | 120,065,341 | 9b7a70692d09c34c62e8c35015e96fc8995b8e11be380e68812366f67cfb691f |
+| Dentiva Pro-1.0.0-win-x64-setup.exe.blockmap | 93,251 | ac8d33659a4429715d1db4d08740c8b9aaee7ab68127ac02d63278275b4e5478 |
+
+Source of truth: `ci-logs:manifests/v1.0.0/release-manifest.json`; hashes recomputed
+independently on the Windows runner (`Verify SHA256SUMS.txt covers every artifact` step).
+A previous same-numbered release cut from `6b459b3` (before this cycle's fixes —
+no activation, broken PDF export/print, timeline caps) was **superseded and replaced**;
+its assets are gone, download only from the 2026-09-26 release.
+
+## 8. Final sign-off
+
+Zero known release-blocking issues. Feature freeze in effect: the product identity is
+simply **Dentiva Pro** (1.0.0). Outstanding non-blocking items are listed in §7.5
+(code signing — commercial decision; physical clean-machine pass — recommended,
+CI-automated equivalents green; printer-driver eyeball on physical hardware).
